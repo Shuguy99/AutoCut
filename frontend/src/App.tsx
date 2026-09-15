@@ -4,8 +4,16 @@ import './App.css'
 type Stage = 'transcribe' | 'score' | 'cut' | 'montage' | 'done' | null
 
 interface Health {
+  ok: boolean
+  version: string
   ffmpeg: boolean
-  ollama: { connected: boolean; model: string; models: string[] }
+  ollama: {
+    connected: boolean
+    base_url: string
+    model: string
+    resolved_model: string | null
+    models: string[]
+  }
   whisper_model: string
 }
 
@@ -102,20 +110,30 @@ function App() {
 
   const fileInput = useRef<HTMLInputElement>(null)
   const esRef = useRef<EventSource | null>(null)
+  const submittingRef = useRef(false)
 
   const loadHistory = useCallback(() => {
     fetch('/api/jobs')
       .then((r) => r.json())
       .then((j: { jobs: JobStatus[] }) => setHistory(j.jobs.filter((x) => x.status === 'completed')))
-      .catch(() => {})
+      .catch((e) => console.error('Не удалось загрузить историю:', e))
   }, [])
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch(() => setHealth(null))
+    let cancelled = false
+    const checkHealth = () => {
+      fetch('/api/health')
+        .then((r) => r.json())
+        .then((h) => { if (!cancelled) setHealth(h) })
+        .catch(() => { if (!cancelled) setHealth(null) })
+    }
+    checkHealth()
+    const id = setInterval(checkHealth, 10_000)
     loadHistory()
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
   }, [loadHistory])
 
   const startStreaming = useCallback(
@@ -134,16 +152,20 @@ function App() {
           const s: JobStatus = JSON.parse(e.data)
           setStatus(s)
           if (s.status === 'completed' || s.status === 'error') finish()
-        } catch {}
+        } catch (err) {
+          console.error('Не удалось разобрать SSE-сообщение:', err)
+        }
       }
       es.onerror = () => {
-        if (es.readyState === EventSource.CLOSED) esRef.current = null
+        if (es.readyState === EventSource.CLOSED && esRef.current === es) esRef.current = null
       }
       es.addEventListener('done', (e) => {
         try {
           const s: JobStatus = JSON.parse((e as MessageEvent<string>).data)
           setStatus(s)
-        } catch {}
+        } catch (err) {
+          console.error('Не удалось разобрать done-сообщение:', err)
+        }
         finish()
       })
       es.addEventListener('gone', () => {
@@ -157,11 +179,14 @@ function App() {
   useEffect(() => () => esRef.current?.close(), [])
 
   const onFile = (f: File | undefined | null) => {
-    if (f && /\.(mp4|mov|mkv|avi|webm|m4v|ts)$/i.test(f.name)) {
+    if (!f) return
+    if (/\.(mp4|mov|mkv|avi|webm|m4v|ts)$/i.test(f.name)) {
       setFile(f)
       setYoutubeUrl('')
       setReprocessJob(null)
       setStatus(null)
+    } else {
+      setStatus({ status: 'error', stage: null, progress: 0, error: `Неподдерживаемый формат: ${f.name}`, result: null })
     }
   }
 
@@ -194,10 +219,12 @@ function App() {
   }
 
   const submit = async () => {
-    if (reprocessJob) {
-      setUploading(true)
-      setStatus({ status: 'processing', stage: 'score', progress: 30, error: null, result: null })
-      try {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    try {
+      if (reprocessJob) {
+        setUploading(true)
+        setStatus({ status: 'processing', stage: 'score', progress: 30, error: null, result: null })
         const proc = await fetch(`/api/process/${reprocessJob}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -205,17 +232,11 @@ function App() {
         })
         if (!proc.ok) throw new Error(await proc.text())
         startStreaming(reprocessJob)
-      } catch (e) {
-        setStatus({ status: 'error', stage: null, progress: 0, error: String(e), result: null })
-      } finally {
-        setUploading(false)
+        return
       }
-      return
-    }
-    if (!file && !youtubeUrl.trim()) return
-    setUploading(true)
-    setStatus({ status: 'uploaded', stage: null, progress: 0, error: null, result: null })
-    try {
+      if (!file && !youtubeUrl.trim()) return
+      setUploading(true)
+      setStatus({ status: 'uploaded', stage: null, progress: 0, error: null, result: null })
       let job_id: string
       if (youtubeUrl.trim()) {
         const dl = await fetch('/api/download', {
@@ -224,13 +245,17 @@ function App() {
           body: JSON.stringify({ url: youtubeUrl.trim(), options: buildOptions() }),
         })
         if (!dl.ok) throw new Error(await dl.text())
-        job_id = (await dl.json()).id
+        const data = (await dl.json()) as { id?: string }
+        if (!data.id) throw new Error('Сервер не вернул ID джоба')
+        job_id = data.id
       } else if (file) {
         const fd = new FormData()
         fd.append('file', file)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         if (!up.ok) throw new Error(await up.text())
-        job_id = (await up.json()).job_id
+        const data = (await up.json()) as { job_id?: string }
+        if (!data.job_id) throw new Error('Сервер не вернул ID джоба')
+        job_id = data.job_id
         const proc = await fetch(`/api/process/${job_id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -244,6 +269,7 @@ function App() {
     } catch (e) {
       setStatus({ status: 'error', stage: null, progress: 0, error: String(e), result: null })
     } finally {
+      submittingRef.current = false
       setUploading(false)
     }
   }
@@ -268,8 +294,10 @@ function App() {
         <h1>AutoCut</h1>
         <p>Закинь видео — получи нарезку самых интересных моментов с субтитрами.</p>
         <div className="health">
-          <span className={health?.ffmpeg ? 'ok' : 'bad'}>ffmpeg</span>
-          <span className={health?.ollama.connected ? 'ok' : 'bad'}>Ollama·{health?.whisper_model}</span>
+          <span className={health ? (health.ffmpeg ? 'ok' : 'bad') : 'bad'}>ffmpeg</span>
+          <span className={health?.ollama.connected ? 'ok' : 'bad'}>
+            {health ? `Ollama·${health.whisper_model}` : 'Ollama'}
+          </span>
           {health?.ollama.connected && <em>{health.ollama.model}</em>}
         </div>
       </header>
@@ -310,7 +338,15 @@ function App() {
             {!reprocessJob && (
             <div
               className={`dropzone${dragging ? ' active' : ''}`}
+              role="button"
+              tabIndex={0}
               onClick={() => fileInput.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  fileInput.current?.click()
+                }
+              }}
               onDragOver={(e) => {
                 e.preventDefault()
                 setDragging(true)
@@ -395,7 +431,7 @@ function App() {
                   max={20}
                   value={clipMinSec}
                   disabled={busy}
-                  onChange={(e) => setClipMinSec(Number(e.target.value))}
+                  onChange={(e) => setClipMinSec(Math.min(Number(e.target.value), clipMaxSec - 2))}
                 />
               </label>
               <label>
@@ -407,7 +443,7 @@ function App() {
                   step={5}
                   value={clipMaxSec}
                   disabled={busy}
-                  onChange={(e) => setClipMaxSec(Number(e.target.value))}
+                  onChange={(e) => setClipMaxSec(Math.max(Number(e.target.value), clipMinSec + 2))}
                 />
               </label>
               <label>
@@ -502,7 +538,7 @@ function App() {
               </h2>
               <video controls src={status.result.montage.file} />
               <div className="result-actions">
-                <a className="download" href={status.result.montage.file} download>
+                <a className="download" href={status.result.montage.file} download="highlights.mp4">
                   Скачать highlights.mp4
                 </a>
                 <button
@@ -549,9 +585,9 @@ function App() {
           <section className="card history">
             <h2>Недавние нарезки</h2>
             <div className="history-list">
-              {history.map((h) => (
+              {history.map((h, index) => (
                 <button
-                  key={h.created_at ?? h.id ?? String(Math.random())}
+                  key={h.id ?? h.created_at ?? `job-${index}`}
                   className="history-item"
                   onClick={() => {
                     setStatus(h)

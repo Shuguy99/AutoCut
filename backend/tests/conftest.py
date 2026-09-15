@@ -13,10 +13,14 @@ _TEST_DATA = Path(tempfile.mkdtemp(prefix="autocut_test_"))
 os.environ["AUTOCUT_DATA_DIR"] = str(_TEST_DATA)
 
 import jobs  # noqa: E402
+import ollama_resolver  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _fresh_jobs(monkeypatch):
     """Полный изоляция: пустой реестр джобов на каждый тест."""
     monkeypatch.setattr(jobs, "_JOBS", {})
+    jobs._CANCELLED.clear()
+    ollama_resolver._CACHE_TS = 0.0
+    ollama_resolver._CACHE_MODEL = None
     yield

@@ -16,7 +16,10 @@ def probe_duration(video_path: str) -> float:
     out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
     if out.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {out.stderr}")
-    return float(json.loads(out.stdout)["format"]["duration"])
+    try:
+        return float(json.loads(out.stdout)["format"]["duration"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(f"Не удалось определить длительность видео: {exc}") from exc
 
 
 def probe_dimensions(video_path: str) -> tuple[int, int]:
@@ -27,7 +30,10 @@ def probe_dimensions(video_path: str) -> tuple[int, int]:
     out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
     if out.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {out.stderr}")
-    st = json.loads(out.stdout)["streams"][0]
+    streams = json.loads(out.stdout).get("streams", [])
+    if not streams:
+        raise RuntimeError("В видео нет видеопотока")
+    st = streams[0]
     return int(st["width"]), int(st["height"])
 
 
@@ -55,10 +61,11 @@ def cut_clip(
         _cut_with_filter(video_path, start, duration, out_path, srt_path, aspect, cwd)
     elif srt_path:
         srt_name = Path(srt_path).name
+        _w, h = probe_dimensions(video_path)
         cmd = [
             "ffmpeg", "-y",
             "-ss", f"{start:.3f}", "-i", video_path,
-            "-filter_complex", f"[0:v]subtitles={srt_name}:force_style='{_sub_style(720)}'[v]",
+            "-filter_complex", f"[0:v]subtitles={srt_name}:force_style='{_sub_style(h)}'[v]",
             "-map", "[v]", "-map", "0:a",
             "-t", f"{duration:.3f}",
             "-c:v", "libx264", "-preset", "fast", "-crf", "20",

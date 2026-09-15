@@ -210,7 +210,8 @@ def _assemble_clips(
         if end - start < clip_min:
             start = max(0.0, start)
             end = min(total_duration, start + clip_min)
-        if end <= start:
+        if end - start < clip_min or end <= start:
+            # у конца видео не хватает длины под клип — пропускаем
             continue
         top = max(group, key=lambda c: c["score"])
         title = " · ".join(dict.fromkeys([ch["title"] for ch in group]))

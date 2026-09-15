@@ -24,7 +24,7 @@ from config import (
     WHISPER_MODEL,
 )
 from downloader import download_youtube
-from ollama_resolver import resolve_model
+from ollama_resolver import _ollama_native, resolve_model
 from pipeline import reprocess_pipeline, run_pipeline
 
 logging.basicConfig(
@@ -112,8 +112,11 @@ async def upload(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат: {suffix}")
     job_id = jobs.create_job(file.filename or "video.mp4")
     dest = Path(jobs.get_job(job_id)["video_path"])
-    with open(dest, "wb") as out:
-        shutil.copyfileobj(file.file, out)
+    try:
+        with open(dest, "wb") as out:
+            shutil.copyfileobj(file.file, out)
+    finally:
+        await file.close()
     jobs.update(job_id, status="ready")
     return {"job_id": job_id, "status": "ready"}
 
@@ -171,7 +174,7 @@ def download(req: DownloadRequest) -> dict:
         except Exception:
             raise
         jobs.raise_if_cancelled(job_id)
-        jobs.update(job_id, status="ready", stage=None, progress=30, stage_detail="Готово: видеозапись скачана")
+        jobs.update(job_id, progress=30, stage_detail="Видеозапись скачана, запускаю обработку")
         run_pipeline(job, options)
 
     jobs.update(job_id, status="download", stage="download", progress=1)
@@ -225,8 +228,9 @@ def clip_file(job_id: str, filename: str) -> FileResponse:
     job = jobs.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Джоб не найден")
-    path = Path(job["clips_dir"]) / filename
-    if not path.exists():
+    base = Path(job["clips_dir"]).resolve()
+    path = (base / filename).resolve()
+    if not path.is_relative_to(base) or not path.exists():
         raise HTTPException(status_code=404, detail="Файл не найден")
     return FileResponse(path, media_type="video/mp4", filename=filename)
 
@@ -247,11 +251,8 @@ def thumb_file(job_id: str, filename: str) -> FileResponse:
     job = jobs.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Джоб не найден")
-    path = Path(job["clips_dir"]) / filename
-    if not path.exists():
+    base = Path(job["clips_dir"]).resolve()
+    path = (base / filename).resolve()
+    if not path.is_relative_to(base) or not path.exists():
         raise HTTPException(status_code=404, detail="Файл не найден")
     return FileResponse(path, media_type="image/jpeg")
-
-
-def _ollama_native() -> str:
-    return OLLAMA_BASE_URL.rstrip("/").rsplit("/v1", 1)[0]

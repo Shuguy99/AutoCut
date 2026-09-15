@@ -7,8 +7,7 @@ from typing import Any
 
 import httpx
 
-from config import OLLAMA_BASE_URL
-from ollama_resolver import resolve_model
+from ollama_resolver import _ollama_native, resolve_model
 
 MAX_WORDS_PER_CHUNK = 130
 MAX_CHUNKS_PER_REQUEST = 15
@@ -109,7 +108,7 @@ def _fill_missing(chunks: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
                 data = json.loads(resp.json()["message"]["content"])
                 if isinstance(data, dict) and "score" in data:
                     out[int(data.get("chunk_id", ch["chunk_id"]))] = data
-        except (httpx.HTTPError, json.JSONDecodeError) as exc:
+        except (httpx.HTTPError, KeyError, TypeError, json.JSONDecodeError) as exc:
             print(f"[scorer] fill_missing chunk {ch['chunk_id']} failed: {exc}", file=sys.stderr)
     return out
 
@@ -167,7 +166,7 @@ def _call_ollama(chunks: list[dict[str, Any]], force_spread: bool = False) -> li
             )
             resp.raise_for_status()
             content = resp.json()["message"]["content"]
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, KeyError, TypeError) as exc:
         print(f"[scorer] Ollama request failed: {exc}", file=sys.stderr)
         return [{"chunk_id": ch["chunk_id"], "score": 1} for ch in chunks]
 
@@ -221,10 +220,6 @@ def _recover_json(content: str) -> list[dict[str, Any]] | None:
 
 def _to_score(value: Any) -> int:
     try:
-        return max(1, min(99, int(value)))
+        return max(1, min(99, int(float(str(value).replace(",", ".")))))
     except (TypeError, ValueError):
         return 1
-
-
-def _ollama_native() -> str:
-    return OLLAMA_BASE_URL.rstrip("/").rsplit("/v1", 1)[0]

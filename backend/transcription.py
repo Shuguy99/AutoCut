@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any
 
 from config import WHISPER_DEVICE, WHISPER_LANGUAGE, WHISPER_MODEL
 
 _MODEL = None
+_MODEL_LOCK = threading.Lock()
 
 
 def _get_model():
     global _MODEL
     if _MODEL is None:
-        from faster_whisper import WhisperModel
-        _MODEL = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type="auto")
+        with _MODEL_LOCK:
+            if _MODEL is None:
+                from faster_whisper import WhisperModel
+                _MODEL = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type="auto")
     return _MODEL
 
 
@@ -91,7 +95,8 @@ def make_srt(segments: list[dict[str, Any]], offset: float = 0.0) -> str:
             cues.append((cur_start, cur_end, " ".join(cur)))
             cur_start, cur_end, cur = start, end, [w]
         else:
-            cur_end, cur.append(w)
+            cur_end = end
+            cur.append(w)
     if cur:
         cues.append((cur_start, cur_end, " ".join(cur)))
 

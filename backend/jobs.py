@@ -38,7 +38,8 @@ def cancel(job_id: str) -> str:
 
 
 def is_cancelled(job_id: str) -> bool:
-    return job_id in _CANCELLED
+    with _LOCK:
+        return job_id in _CANCELLED
 
 
 def raise_if_cancelled(job_id: str) -> None:
@@ -120,12 +121,16 @@ def set_error(job_id: str, message: str) -> None:
 
 
 def run_background(job_id: str, fn: Callable[[dict[str, Any]], None]) -> None:
-    job = _JOBS[job_id]
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise KeyError(f"Job {job_id} not found")
+        job_snapshot = dict(job)
     job["_event"].clear()
 
     def _run() -> None:
         try:
-            fn(job)
+            fn(job_snapshot)
         except CancelledError:
             log.info("job %s cancelled", job_id)
             mark_cancelled(job_id)
@@ -153,6 +158,9 @@ def dump(job_id: str) -> None:
 
 def load_persisted() -> None:
     to_dump: list[str] = []
+    if not JOBS_DIR.exists():
+        log.info("no jobs dir, nothing to restore")
+        return
     with _LOCK:
         for job_dir in sorted(JOBS_DIR.iterdir()):
             if not job_dir.is_dir():
@@ -365,6 +373,8 @@ def cleanup_old_jobs(max_days: float = 7.0, keep: int = 10) -> int:
         if kept_count <= keep:
             continue
         created = str(job.get("created_at") or "")
+        if not created:
+            continue
         try:
             age_days = (now - datetime.fromisoformat(created).timestamp()) / 86400.0
         except ValueError:

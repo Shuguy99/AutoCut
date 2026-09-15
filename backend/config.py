@@ -5,9 +5,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("AUTOCUT_DATA_DIR", BASE_DIR / "data"))
 UPLOADS_DIR = DATA_DIR / "uploads"
 JOBS_DIR = DATA_DIR / "jobs"
-THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 
-for d in (UPLOADS_DIR, JOBS_DIR, THUMBNAILS_DIR):
+for d in (UPLOADS_DIR, JOBS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")

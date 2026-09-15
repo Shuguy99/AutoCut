@@ -94,7 +94,8 @@ def _locate_output(out_path: Path, info: dict) -> Path | None:
     if candidate.exists():
         return candidate
     # yt-dlp может оставить файл с вставкой формата (например .f609.mp4)
-    for p in out_path.parent.glob(out_path.stem + "*.mp4"):
-        if p.stat().st_size > 0:
+    valid_suffixes = (".mp4", ".webm", ".mkv", ".mov", ".m4v")
+    for p in sorted(out_path.parent.glob(out_path.stem + ".*")):
+        if p.suffix.lower() in valid_suffixes and p.stat().st_size > 0:
             return p
     return None
