@@ -1,0 +1,15 @@
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: #2f6fed;
+}
+
+code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  background: #eef0f4;
+  padding: 1px 5px;
+  border-radius: 5px;
+}
