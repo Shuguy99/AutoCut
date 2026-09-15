@@ -47,6 +47,31 @@ npm run dev        # → http://localhost:5173
 
 Или одной командой: `.\start.ps1` (Windows; поставит окружения при первом запуске и поднимет всё сам).
 
+## Docker-запуск
+
+Поднимает весь стек одним контейнерным сетапом (Ollama CPU + backend + фронтенд):
+
+```bash
+docker compose up -d --build
+```
+
+- Фронтенд: http://localhost:8080
+- Данные (загрузки, джобы) и модели (Ollama, Whisper) хранятся в томах — переживают пересоздание контейнеров.
+
+Первый запуск: затянуть модель в Ollama-контейнер:
+
+```bash
+docker compose exec ollama ollama pull qwen2.5:7b-instruct
+```
+
+Остановка: `docker compose down` (тома сохраняются). Полная очистка: `docker compose down -v`.
+
+Настройка через переменные окружения (те же, что и в таблице ниже), например:
+
+```bash
+OLLAMA_MODEL=qwen2.5:3b WHISPER_MODEL=base docker compose up -d --build
+```
+
 ## Настройка (env-переменные)
 
 | Переменная | По умолчанию | Что делает |

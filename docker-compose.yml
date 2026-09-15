@@ -1,0 +1,55 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434/v1
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_DEVICE: cpu
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-}
+      AUTOCUT_DATA_DIR: /data
+      AUTOCUT_JOB_RETENTION_DAYS: ${AUTOCUT_JOB_RETENTION_DAYS:-7}
+      AUTOCUT_KEEP_RECENT_JOBS: ${AUTOCUT_KEEP_RECENT_JOBS:-10}
+    volumes:
+      - autocut-data:/data
+      - hf-cache:/root/.cache/huggingface
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=2)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  ollama-models:
+  autocut-data:
+  hf-cache:
