@@ -52,6 +52,16 @@ def test_file_serving_and_traversal(config: Config):
     assert client.get("/files/../../etc/passwd").status_code == 404
 
 
+def test_subtitles_served_as_text(config: Config):
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    (config.output_dir / "clip.ass").write_text("[Script Info]", encoding="utf-8")
+    client = _client(config)
+    response = client.get("/files/clip.ass")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "[Script Info]" in response.text
+
+
 def test_index(config: Config):
     client = _client(config)
     response = client.get("/")

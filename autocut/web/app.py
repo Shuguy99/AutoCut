@@ -16,6 +16,12 @@ from ..models import JobOptions
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Некоторые системы сопоставляют .ass с audio/aac — отдаём субтитры как текст.
+TEXT_MEDIA_TYPES = {
+    ".ass": "text/plain; charset=utf-8",
+    ".srt": "text/plain; charset=utf-8",
+}
+
 
 class CreateJobRequest(BaseModel):
     source: str = Field(min_length=1)
@@ -117,6 +123,8 @@ def create_app(
         target = (root / path).resolve()
         if not target.is_relative_to(root) or not target.is_file():
             raise HTTPException(status_code=404, detail="файл не найден")
-        return FileResponse(target)
+        return FileResponse(
+            target, media_type=TEXT_MEDIA_TYPES.get(target.suffix.lower())
+        )
 
     return app
