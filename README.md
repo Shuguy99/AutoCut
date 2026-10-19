@@ -1,0 +1,73 @@
+# AutoCut
+
+Локальный конвейер: YouTube или файл → вертикальные клипы 1080×1920 с субтитрами.
+
+Что делает:
+
+1. скачивает видео с YouTube (или берёт локальный файл);
+2. находит N самых «живых» фрагментов длиной 20–60 секунд по громкости, речи и сменам сцен;
+3. распознаёт речь через faster-whisper и вжигает небольшие субтитры снизу;
+4. сохраняет клипы по папкам на каждое исходное видео.
+
+## Установка
+
+Нужны `ffmpeg`/`ffprobe` (8.x) и Python 3.11+.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev,whisper]"
+```
+
+Стек распознавания речи вынесен в extra `whisper` (ctranslate2/onnxruntime/av — тяжёлые).
+Без него приложение запускается, но субтитры не сделает.
+
+Первый запуск Whisper скачает модель (~500 МБ для `small`).
+
+Кодек: H.264. Энкодер выбирается автоматически (libx264 → VAAPI → NVENC → libopenh264 →
+mpeg4), потому что в Fedora-сборке `ffmpeg-free` нет libx264. Для лучшего качества
+поставьте полный ffmpeg из RPM Fusion.
+
+## Веб
+
+```bash
+.venv/bin/autocut web
+```
+
+Откройте http://127.0.0.1:8000, вставьте ссылку YouTube или путь к локальному файлу.
+
+## CLI
+
+```bash
+.venv/bin/autocut run "https://youtu.be/..." --clips 5
+.venv/bin/autocut run ./video.mp4 --clips 3 --format crop
+.venv/bin/autocut trending --region RU
+```
+
+Прокси: `--proxy socks5://127.0.0.1:1080` или `AUTOCUT_PROXY`.
+
+## Результат
+
+```
+output/<канал>/<video_id>_<название>/
+  clips/clip_01_score-0.87.mp4
+  clips/clip_01.ass
+  clips/clip_01.jpg
+  transcript.srt
+  transcript.json
+  metadata.json
+  source.json
+  job.log
+```
+
+## Настройки
+
+`config.example.yaml` → скопируйте в `config.yaml` или используйте переменные
+`AUTOCUT_OUTPUT`, `AUTOCUT_WORKDIR`, `AUTOCUT_MODEL`, `AUTOCUT_PROXY`,
+`AUTOCUT_COOKIES`, `AUTOCUT_DEVICE`, `AUTOCUT_COMPUTE_TYPE`.
+
+## Ограничения
+
+- YouTube должен быть доступен (с текущей машины он блокируется — нужен прокси/VPN).
+- `trending` зависит от доступности ленты YouTube.
+- Речь распознаётся локально на CPU; `small` — компромисс скорости и качества.
+- Права на исходное видео — ответственность пользователя.
