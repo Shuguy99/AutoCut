@@ -57,3 +57,39 @@ def test_queue_limit(config: Config):
         manager.submit("/tmp/c.mp4", JobOptions(clips=1))
     gate.set()
     manager.shutdown()
+
+
+def test_submit_many_creates_all_jobs(config: Config):
+    def runner(source, options, config, progress=None, is_cancelled=None):
+        return {"clips": []}
+
+    manager = JobManager(config, runner=runner, max_queue=5)
+    jobs = manager.submit_many(
+        ["/tmp/a.mp4", "/tmp/b.mp4"], JobOptions(clips=1)
+    )
+    assert len(jobs) == 2
+    assert {job.source for job in jobs} == {"/tmp/a.mp4", "/tmp/b.mp4"}
+    for job in jobs:
+        _wait(manager, job.id)
+    manager.shutdown()
+
+
+def test_submit_many_queue_full_adds_nothing(config: Config):
+    gate = threading.Event()
+
+    def runner(*args, **kwargs):
+        gate.wait(3)
+        return {"clips": []}
+
+    manager = JobManager(config, runner=runner, max_queue=1)
+    first = manager.submit("/tmp/a.mp4", JobOptions(clips=1))
+    _wait(manager, first.id, status="running")
+
+    with pytest.raises(QueueFullError):
+        manager.submit_many(
+            ["/tmp/b.mp4", "/tmp/c.mp4"], JobOptions(clips=1)
+        )
+    assert len(manager.list()) == 1
+
+    gate.set()
+    manager.shutdown()

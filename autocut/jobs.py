@@ -60,20 +60,33 @@ class JobManager:
         self._thread.start()
 
     def submit(self, source: str, options: JobOptions) -> Job:
-        job = Job(
-            id=uuid.uuid4().hex[:12], source=source, options=options
-        )
+        return self.submit_many([source], options)[0]
+
+    def submit_many(
+        self, sources: list[str], options: JobOptions
+    ) -> list[Job]:
+        jobs = [
+            Job(id=uuid.uuid4().hex[:12], source=source, options=options)
+            for source in sources
+        ]
         with self._lock:
-            self._jobs[job.id] = job
-        try:
-            self._queue.put_nowait(job)
-        except queue.Full as exc:
-            with self._lock:
-                self._jobs.pop(job.id, None)
-            raise QueueFullError(
-                "очередь заполнена, попробуйте позже"
-            ) from exc
-        return job
+            free = self._queue.maxsize - self._queue.qsize()
+            if len(jobs) > free:
+                raise QueueFullError(
+                    f"очередь заполнена: свободно {max(0, free)} мест"
+                )
+            for job in jobs:
+                self._jobs[job.id] = job
+            try:
+                for job in jobs:
+                    self._queue.put_nowait(job)
+            except queue.Full as exc:
+                for job in jobs:
+                    self._jobs.pop(job.id, None)
+                raise QueueFullError(
+                    "очередь заполнена, попробуйте позже"
+                ) from exc
+        return jobs
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
