@@ -8,7 +8,9 @@ from dataclasses import dataclass
 FEED_URL = "https://rutube.ru/api/v2/video/recommendation/main"
 USER_AGENT = "Mozilla/5.0"
 MIN_DURATION = 120.0
-MAX_DURATION = 1800.0
+MAX_DURATION = 3600.0
+RAW_PAGE_MIN = 50
+RAW_PAGE_MAX = 99
 TIMEOUT = 15.0
 
 
@@ -20,6 +22,7 @@ class FeedError(RuntimeError):
 class FeedPage:
     items: list[dict]
     has_more: bool
+    next_offset: int
 
 
 def _fetch_json(url: str, timeout: float) -> dict:
@@ -53,8 +56,13 @@ def _to_item(raw: dict) -> dict | None:
     }
 
 
+def _raw_limit(limit: int) -> int:
+    return min(RAW_PAGE_MAX, max(RAW_PAGE_MIN, limit * 4))
+
+
 def fetch_feed(offset: int = 0, limit: int = 12, timeout: float = TIMEOUT) -> FeedPage:
-    query = urllib.parse.urlencode({"limit": limit, "offset": offset})
+    raw_limit = _raw_limit(limit)
+    query = urllib.parse.urlencode({"limit": raw_limit, "offset": offset})
     try:
         payload = _fetch_json(f"{FEED_URL}?{query}", timeout)
     except Exception as exc:  # noqa: BLE001
@@ -75,4 +83,8 @@ def fetch_feed(offset: int = 0, limit: int = 12, timeout: float = TIMEOUT) -> Fe
         seen.add(item["id"])
         items.append(item)
     items.sort(key=lambda item: item["views"], reverse=True)
-    return FeedPage(items=items, has_more=len(results) >= limit)
+    return FeedPage(
+        items=items[:limit],
+        has_more=len(results) >= raw_limit,
+        next_offset=offset + raw_limit,
+    )

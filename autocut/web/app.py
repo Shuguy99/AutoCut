@@ -95,7 +95,7 @@ def create_app(
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {
             "items": page.items,
-            "next_offset": offset + limit,
+            "next_offset": page.next_offset,
             "has_more": page.has_more,
         }
 

@@ -82,6 +82,7 @@ def test_feed_endpoint(config: Config, monkeypatch):
             "url": "https://rutube.ru/video/v1/", "created_at": None,
         }],
         has_more=True,
+        next_offset=62,
     )
     calls = {}
 
@@ -96,9 +97,19 @@ def test_feed_endpoint(config: Config, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["items"][0]["id"] == "v1"
-    assert data["next_offset"] == 18
+    assert data["next_offset"] == 62
     assert data["has_more"] is True
     assert calls == {"offset": 12, "limit": 6}
+
+
+def test_feed_endpoint_last_page(config: Config, monkeypatch):
+    page = FeedPage(items=[], has_more=False, next_offset=100)
+    monkeypatch.setattr(
+        "autocut.web.app.fetch_feed", lambda offset=0, limit=12: page
+    )
+    client = _client(config)
+    data = client.get("/api/feed?offset=50&limit=12").json()
+    assert data == {"items": [], "next_offset": 100, "has_more": False}
 
 
 def test_feed_endpoint_error(config: Config, monkeypatch):
