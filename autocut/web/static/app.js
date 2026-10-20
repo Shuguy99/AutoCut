@@ -13,6 +13,15 @@ let feedOffset = 0;
 let feedLoading = false;
 let pollTimer = null;
 
+const playlistPanel = document.getElementById("playlist-panel");
+const playlistTitle = document.getElementById("playlist-title");
+const playlistCount = document.getElementById("playlist-count");
+const playlistItemsRoot = document.getElementById("playlist-items");
+const playlistRun = document.getElementById("playlist-run");
+const playlistTemplate = document.getElementById("playlist-item-template");
+const selectedPlaylist = new Map();
+let mode = "video";
+
 const stageNames = {
   queued: "в очереди", start: "запуск", download: "скачивание",
   analyze: "анализ", transcribe: "субтитры", score: "выбор фрагментов",
@@ -44,6 +53,119 @@ function formatDuration(seconds) {
   }
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
+
+function setMode(next) {
+  mode = next;
+  document.querySelectorAll(".mode").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === next);
+  });
+  document.getElementById("submit").textContent =
+    next === "playlist" ? "Показать список" : "Сделать клипы";
+  if (next === "video") playlistPanel.classList.add("hidden");
+}
+
+function currentOptions() {
+  return {
+    clips: Number(document.getElementById("clips").value),
+    min_duration: Number(document.getElementById("min-duration").value),
+    max_duration: Number(document.getElementById("max-duration").value),
+    layout: document.getElementById("layout").value,
+    proxy: document.getElementById("proxy").value.trim() || null,
+  };
+}
+
+function updatePlaylistCount() {
+  const count = selectedPlaylist.size;
+  playlistRun.textContent = `Запустить выбранные (${count})`;
+  playlistRun.disabled = count === 0;
+}
+
+function playlistItem(item) {
+  const node = playlistTemplate.content.firstElementChild.cloneNode(true);
+  const checkbox = el("input", node);
+  const image = el("img", node);
+  if (item.thumbnail) {
+    image.src = item.thumbnail;
+    image.alt = item.title;
+  } else {
+    image.remove();
+  }
+  el(".playlist-item-title", node).textContent = item.title;
+  el(".playlist-item-meta", node).textContent =
+    `${item.channel} · ${formatDuration(item.duration)}`;
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) selectedPlaylist.set(item.url, item);
+    else selectedPlaylist.delete(item.url);
+    updatePlaylistCount();
+  });
+  return node;
+}
+
+async function loadPlaylist(url) {
+  playlistPanel.classList.remove("hidden");
+  playlistItemsRoot.innerHTML = "";
+  selectedPlaylist.clear();
+  updatePlaylistCount();
+  playlistTitle.textContent = "Загружаем плейлист…";
+  playlistCount.textContent = "";
+
+  const response = await fetch("/api/playlist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url,
+      limit: 30,
+      proxy: document.getElementById("proxy").value.trim() || null,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || `HTTP ${response.status}`);
+  }
+  playlistTitle.textContent = data.title;
+  playlistCount.textContent = data.truncated
+    ? `первые ${data.items.length}`
+    : `видео: ${data.items.length}`;
+  for (const item of data.items) {
+    playlistItemsRoot.append(playlistItem(item));
+  }
+  if (!data.items.length) {
+    playlistTitle.textContent = "В плейлисте нет доступных видео";
+  }
+}
+
+document.querySelectorAll(".mode").forEach((button) => {
+  button.addEventListener("click", () => setMode(button.dataset.mode));
+});
+
+playlistRun.addEventListener("click", async () => {
+  const sources = [...selectedPlaylist.values()].map((item) => item.url);
+  if (!sources.length) return;
+  playlistRun.disabled = true;
+  try {
+    const response = await fetch("/api/jobs/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sources, options: currentOptions() }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || `HTTP ${response.status}`);
+    }
+    for (const job of data.jobs || []) renderJob(job);
+    startPolling();
+    selectedPlaylist.clear();
+    playlistItemsRoot.innerHTML = "";
+    updatePlaylistCount();
+    playlistTitle.textContent = "";
+    playlistCount.textContent = "";
+  } catch (err) {
+    formError.textContent = err.message;
+    formError.classList.remove("hidden");
+  } finally {
+    playlistRun.disabled = selectedPlaylist.size === 0;
+  }
+});
 
 function feedCard(item) {
   const node = feedTemplate.content.firstElementChild.cloneNode(true);
@@ -181,16 +303,18 @@ form.addEventListener("submit", async (event) => {
   formError.classList.add("hidden");
   const source = document.getElementById("source").value.trim();
   if (!source) return;
-  const payload = {
-    source,
-    options: {
-      clips: Number(document.getElementById("clips").value),
-      min_duration: Number(document.getElementById("min-duration").value),
-      max_duration: Number(document.getElementById("max-duration").value),
-      layout: document.getElementById("layout").value,
-      proxy: document.getElementById("proxy").value.trim() || null,
-    },
-  };
+
+  if (mode === "playlist") {
+    try {
+      await loadPlaylist(source);
+    } catch (err) {
+      formError.textContent = err.message;
+      formError.classList.remove("hidden");
+    }
+    return;
+  }
+
+  const payload = { source, options: currentOptions() };
   try {
     const response = await fetch("/api/jobs", {
       method: "POST",
