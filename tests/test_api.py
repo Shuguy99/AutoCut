@@ -4,8 +4,10 @@ from fastapi.testclient import TestClient
 
 from autocut import feed as feed_module
 from autocut.config import Config
+from autocut.downloader import DownloadError, NotAPlaylistError
 from autocut.feed import FeedPage
 from autocut.jobs import JobManager
+from autocut.models import PlaylistInfo, PlaylistItem
 from autocut.web.app import create_app
 
 
@@ -113,3 +115,66 @@ def test_feed_endpoint_validates_limit(config: Config):
     client = _client(config)
     assert client.get("/api/feed?limit=100").status_code == 422
     assert client.get("/api/feed?offset=-1").status_code == 422
+
+
+def test_playlist_endpoint(config: Config, monkeypatch):
+    info = PlaylistInfo(
+        title="Сборник",
+        items=[PlaylistItem(
+            "v1", "Первое", "Канал", 120.0,
+            "https://rutube.ru/video/v1/", None,
+        )],
+        truncated=True,
+    )
+    calls = {}
+
+    def fake_list(url, limit=30, proxy=None, cookies=None):
+        calls.update(url=url, limit=limit, proxy=proxy, cookies=cookies)
+        return info
+
+    monkeypatch.setattr("autocut.web.app.list_playlist", fake_list)
+    client = _client(config)
+    response = client.post("/api/playlist", json={
+        "url": " https://rutube.ru/plst/1/ ",
+        "limit": 5,
+        "proxy": "socks5://x:1",
+    })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "Сборник"
+    assert data["items"][0]["video_id"] == "v1"
+    assert data["truncated"] is True
+    assert calls["url"] == "https://rutube.ru/plst/1/"
+    assert calls["limit"] == 5
+    assert calls["proxy"] == "socks5://x:1"
+
+
+def test_playlist_endpoint_not_a_playlist(config: Config, monkeypatch):
+    def boom(*args, **kwargs):
+        raise NotAPlaylistError("это не плейлист или он пуст")
+
+    monkeypatch.setattr("autocut.web.app.list_playlist", boom)
+    client = _client(config)
+    response = client.post("/api/playlist", json={"url": "https://youtu.be/x"})
+    assert response.status_code == 400
+
+
+def test_playlist_endpoint_network_error(config: Config, monkeypatch):
+    def boom(*args, **kwargs):
+        raise DownloadError("не удалось получить плейлист: timeout")
+
+    monkeypatch.setattr("autocut.web.app.list_playlist", boom)
+    client = _client(config)
+    response = client.post(
+        "/api/playlist", json={"url": "https://rutube.ru/plst/1/"}
+    )
+    assert response.status_code == 502
+
+
+def test_playlist_endpoint_validates_limit(config: Config):
+    client = _client(config)
+    response = client.post(
+        "/api/playlist", json={"url": "https://x", "limit": 0}
+    )
+    assert response.status_code == 422

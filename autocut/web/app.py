@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import quote
 
@@ -11,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..config import Config, load_config
+from ..downloader import DownloadError, NotAPlaylistError, list_playlist
 from ..feed import FeedError, fetch_feed
 from ..jobs import Job, JobManager, QueueFullError
 from ..models import JobOptions
@@ -27,6 +29,12 @@ TEXT_MEDIA_TYPES = {
 class CreateJobRequest(BaseModel):
     source: str = Field(min_length=1)
     options: JobOptions = Field(default_factory=JobOptions)
+
+
+class PlaylistRequest(BaseModel):
+    url: str = Field(min_length=1)
+    limit: int = Field(30, ge=1, le=50)
+    proxy: str | None = None
 
 
 def _job_payload(job: Job, config: Config) -> dict:
@@ -84,6 +92,25 @@ def create_app(
             "items": page.items,
             "next_offset": offset + limit,
             "has_more": page.has_more,
+        }
+
+    @app.post("/api/playlist")
+    def playlist(request: PlaylistRequest) -> dict:
+        try:
+            info = list_playlist(
+                request.url.strip(),
+                limit=request.limit,
+                proxy=request.proxy or config.proxy,
+                cookies=str(config.cookies) if config.cookies else None,
+            )
+        except NotAPlaylistError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except DownloadError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {
+            "title": info.title,
+            "items": [asdict(item) for item in info.items],
+            "truncated": info.truncated,
         }
 
     @app.post("/api/jobs")
