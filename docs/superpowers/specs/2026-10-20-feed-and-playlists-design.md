@@ -72,19 +72,21 @@ autocut/
 ### 5.1 Лента RuTube
 
 - Источник: `GET https://rutube.ru/api/v2/video/recommendation/main?limit=<n>&offset=<o>`, заголовок `User-Agent: Mozilla/5.0`. Авторизация не нужна.
-- `fetch_feed(offset: int = 0, limit: int = 12) -> FeedPage` (`items: list[dict]`, `has_more: bool`):
+- `fetch_feed(offset: int = 0, limit: int = 12) -> FeedPage` (`items: list[dict]`, `has_more: bool`, `next_offset: int`):
   - запрос через `urllib.request` (stdlib, без новой зависимости), таймаут 15 с;
+  - **передискретизация:** у API запрашивается `raw = min(99, max(50, limit * 4))` записей, а наружу отдаётся до `limit` подходящих. Лента рекомендаций на ~90% состоит из длинных фильмов и аудиокниг; при фильтре 2–30 минут страница почти пустела (5–12 карточек на 99 сырых), поэтому одной страницей считаем сырую порцию, из которой набираем карточки;
   - отбрасываем записи с `is_deleted`, `is_livestream`, `is_on_air`;
-  - оставляем только `120 <= duration <= 1800` секунд;
+  - оставляем только `120 <= duration <= 3600` секунд (до 1 часа: длиннее — тяжёлая транскрипция, короче — нечего нарезать);
   - маппинг: `id`, `title`, `channel = author.name`, `duration`, `views = hits or 0`, `thumbnail_url`, `url = video_url` (fallback `https://rutube.ru/video/<id>/`), `created_at = created_ts`;
   - страница сортируется по `views` по убыванию (лента рекомендаций уже ранжирована, но пользователю нужен «популярный» порядок);
   - дубликаты внутри страницы убираются по `id`;
-  - `has_more = True`, если в сыром ответе было не меньше `limit` записей (фильтрация на это не влияет).
+  - `has_more = True`, если в сыром ответе было не меньше `raw` записей (фильтрация на это не влияет);
+  - `next_offset = offset + raw` — сырой offset API для следующей страницы.
 - Ошибки сети, HTTP ≠ 200 и невалидный JSON → `FeedError` с русским сообщением. Исключение не глотается.
-- `GET /api/feed?offset=0&limit=12` → `{"items": [...], "next_offset": 12, "has_more": true}`.
+- `GET /api/feed?offset=0&limit=12` → `{"items": [...], "next_offset": 50, "has_more": true}` (при `limit=12` сырая порция 50).
   - `limit` 1–24, `offset` ≥ 0;
   - `FeedError` → HTTP 502.
-- `next_offset` всегда `offset + limit`; фронтенд дедуплицирует карточки по `id` между страницами.
+- `next_offset` берётся из `FeedPage.next_offset` (это сырой offset API, а не `offset + limit`); фронтенд дедуплицирует карточки по `id` между страницами.
 
 ### 5.2 Плейлисты
 
