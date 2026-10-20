@@ -96,7 +96,7 @@ autocut/
   - `PlaylistInfo`: `title`, `items`, `truncated` (`truncated=True`, если yt-dlp упёрся в `playlistend`);
   - `limit` 1–50, по умолчанию 30.
 - Ссылки RuTube-плейлистов имеют вид `https://rutube.ru/plst/<id>/`; YouTube — `...&list=<id>`. Специальная обработка не нужна: yt-dlp сам определяет тип.
-- `POST /api/playlist` body `{"url": "...", "limit": 30}` → `{"title": "...", "items": [...], "truncated": false}`.
+- `POST /api/playlist` body `{"url": "...", "limit": 30, "proxy": null}` → `{"title": "...", "items": [...], "truncated": false}`; прокси опционален, иначе берётся из конфига.
   - `NotAPlaylistError` или пустой список → HTTP 400 с текстом «это не плейлист или он пуст»;
   - `DownloadError` (сеть, приватный плейлист) → HTTP 502.
 
