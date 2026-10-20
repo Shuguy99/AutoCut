@@ -68,3 +68,67 @@ def test_download_uses_proxy(tmp_path: Path, monkeypatch):
 def test_trending(monkeypatch):
     monkeypatch.setattr(downloader, "YoutubeDL", FakeYDL)
     assert downloader.get_trending("RU") == "https://youtu.be/trend1"
+
+
+class FakePlaylistYDL:
+    last_opts = None
+
+    def __init__(self, opts):
+        FakePlaylistYDL.last_opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def extract_info(self, url, download=False):
+        return {
+            "_type": "playlist",
+            "title": "Сборник",
+            "channel": "Канал",
+            "entries": [
+                {
+                    "id": "v1", "title": "Первое", "duration": 120,
+                    "url": "https://rutube.ru/video/v1/",
+                    "thumbnail": "https://img/1.jpg",
+                },
+                {
+                    "id": "v2", "title": "Второе", "duration": None,
+                    "url": "https://rutube.ru/video/v2/",
+                },
+                {"id": "bad", "title": "Без ссылки"},
+                None,
+            ],
+        }
+
+
+def test_list_playlist(monkeypatch):
+    monkeypatch.setattr(downloader, "YoutubeDL", FakePlaylistYDL)
+    info = downloader.list_playlist("https://rutube.ru/plst/1/", limit=2)
+
+    assert info.title == "Сборник"
+    assert info.truncated is True
+    assert [item.video_id for item in info.items] == ["v1", "v2"]
+    assert info.items[0].channel == "Канал"
+    assert info.items[0].duration == 120.0
+    assert info.items[1].duration is None
+    assert FakePlaylistYDL.last_opts["noplaylist"] is False
+    assert FakePlaylistYDL.last_opts["extract_flat"] == "in_playlist"
+    assert FakePlaylistYDL.last_opts["playlistend"] == 2
+
+
+def test_list_playlist_rejects_single_video(monkeypatch):
+    monkeypatch.setattr(downloader, "YoutubeDL", FakeYDL)
+    with pytest.raises(downloader.NotAPlaylistError):
+        downloader.list_playlist("https://youtu.be/abc123")
+
+
+def test_list_playlist_error(monkeypatch):
+    class BrokenYDL(FakePlaylistYDL):
+        def extract_info(self, url, download=False):
+            raise RuntimeError("network down")
+
+    monkeypatch.setattr(downloader, "YoutubeDL", BrokenYDL)
+    with pytest.raises(downloader.DownloadError):
+        downloader.list_playlist("https://rutube.ru/plst/1/")

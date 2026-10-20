@@ -6,10 +6,14 @@ from pathlib import Path
 from yt_dlp import YoutubeDL
 
 from .media import probe
-from .models import SourceInfo
+from .models import PlaylistInfo, PlaylistItem, SourceInfo
 
 
 class DownloadError(RuntimeError):
+    pass
+
+
+class NotAPlaylistError(DownloadError):
     pass
 
 
@@ -126,3 +130,68 @@ def get_trending(
     if not video_id:
         raise DownloadError("не удалось определить видео из ленты")
     return f"https://www.youtube.com/watch?v={video_id}"
+
+
+def list_playlist(
+    url: str,
+    limit: int = 30,
+    proxy: str | None = None,
+    cookies: str | Path | None = None,
+) -> PlaylistInfo:
+    opts = _opts(
+        extract_flat="in_playlist",
+        noplaylist=False,
+        playlistend=limit,
+        skip_download=True,
+        format=None,
+    )
+    if proxy:
+        opts["proxy"] = proxy
+    if cookies:
+        opts["cookiefile"] = str(cookies)
+
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        raise DownloadError(f"не удалось получить плейлист: {exc}") from exc
+
+    if not info or info.get("_type") != "playlist":
+        raise NotAPlaylistError("это не плейлист или он пуст")
+
+    entries = info.get("entries") or []
+    playlist_title = str(info.get("title") or "Плейлист")
+    playlist_channel = str(
+        info.get("channel") or info.get("uploader") or "unknown"
+    )
+    items: list[PlaylistItem] = []
+    for entry in entries:
+        if not entry:
+            continue
+        video_id = entry.get("id")
+        link = entry.get("webpage_url") or entry.get("url")
+        if not video_id or not link or not str(link).startswith("http"):
+            continue
+        duration = entry.get("duration")
+        items.append(
+            PlaylistItem(
+                video_id=str(video_id),
+                title=str(entry.get("title") or "Без названия"),
+                channel=str(
+                    entry.get("channel")
+                    or entry.get("uploader")
+                    or playlist_channel
+                ),
+                duration=float(duration) if duration is not None else None,
+                url=str(link),
+                thumbnail=entry.get("thumbnail"),
+            )
+        )
+
+    if not items:
+        raise NotAPlaylistError("в плейлисте нет доступных видео")
+    return PlaylistInfo(
+        title=playlist_title,
+        items=items,
+        truncated=len(entries) >= limit,
+    )

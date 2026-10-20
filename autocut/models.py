@@ -60,6 +60,23 @@ class SourceInfo:
     view_count: int | None = None
 
 
+@dataclass
+class PlaylistItem:
+    video_id: str
+    title: str
+    channel: str
+    duration: float | None
+    url: str
+    thumbnail: str | None = None
+
+
+@dataclass
+class PlaylistInfo:
+    title: str
+    items: list[PlaylistItem]
+    truncated: bool = False
+
+
 class JobOptions(BaseModel):
     clips: int = Field(5, ge=1, le=50)
     min_duration: float = Field(20, ge=1, le=120)
