@@ -21,7 +21,13 @@ python3 -m venv .venv
 Стек распознавания речи вынесен в extra `whisper` (ctranslate2/onnxruntime/av — тяжёлые).
 Без него приложение запускается, но субтитры не сделает.
 
-Первый запуск Whisper скачает модель (~500 МБ для `small`).
+Первый запуск Whisper скачает модель (~500 МБ для `small`) в `~/.cache/huggingface/hub`.
+Если загрузка падает с `CAS Client Error` / `File reconstruction error` (сбой Xet-бэкенда
+Hugging Face), повторите с отключённым Xet:
+
+```bash
+HF_HUB_DISABLE_XET=1 .venv/bin/autocut run ./video.mp4
+```
 
 Кодек: H.264. Энкодер выбирается автоматически (libx264 → VAAPI → NVENC → libopenh264 →
 mpeg4), потому что в Fedora-сборке `ffmpeg-free` нет libx264. Для лучшего качества
