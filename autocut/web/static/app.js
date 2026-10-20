@@ -54,10 +54,23 @@ function formatDuration(seconds) {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
+function apiError(data, status) {
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail) && data.detail.length) {
+    const messages = data.detail
+      .map((item) => item && item.msg)
+      .filter(Boolean);
+    if (messages.length) return messages.join("; ");
+    return "Проверьте параметры запроса";
+  }
+  return `HTTP ${status}`;
+}
+
 function setMode(next) {
   mode = next;
   document.querySelectorAll(".mode").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === next);
+    button.setAttribute("aria-pressed", String(button.dataset.mode === next));
   });
   document.getElementById("submit").textContent =
     next === "playlist" ? "Показать список" : "Сделать клипы";
@@ -89,13 +102,21 @@ function playlistItem(item) {
     image.alt = item.title;
   } else {
     image.remove();
+    node.classList.add("no-thumb");
   }
   el(".playlist-item-title", node).textContent = item.title;
   el(".playlist-item-meta", node).textContent =
     `${item.channel} · ${formatDuration(item.duration)}`;
   checkbox.addEventListener("change", () => {
+    if (checkbox.checked && selectedPlaylist.size >= 20) {
+      checkbox.checked = false;
+      formError.textContent = "Можно выбрать не более 20 видео";
+      formError.classList.remove("hidden");
+      return;
+    }
     if (checkbox.checked) selectedPlaylist.set(item.url, item);
     else selectedPlaylist.delete(item.url);
+    formError.classList.add("hidden");
     updatePlaylistCount();
   });
   return node;
@@ -120,7 +141,7 @@ async function loadPlaylist(url) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || `HTTP ${response.status}`);
+    throw new Error(apiError(data, response.status));
   }
   playlistTitle.textContent = data.title;
   playlistCount.textContent = data.truncated
@@ -141,6 +162,8 @@ document.querySelectorAll(".mode").forEach((button) => {
 playlistRun.addEventListener("click", async () => {
   const sources = [...selectedPlaylist.values()].map((item) => item.url);
   if (!sources.length) return;
+  const boxes = [...playlistItemsRoot.querySelectorAll("input")];
+  boxes.forEach((box) => { box.disabled = true; });
   playlistRun.disabled = true;
   try {
     const response = await fetch("/api/jobs/batch", {
@@ -150,7 +173,7 @@ playlistRun.addEventListener("click", async () => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.detail || `HTTP ${response.status}`);
+      throw new Error(apiError(data, response.status));
     }
     for (const job of data.jobs || []) renderJob(job);
     startPolling();
@@ -163,6 +186,7 @@ playlistRun.addEventListener("click", async () => {
     formError.textContent = err.message;
     formError.classList.remove("hidden");
   } finally {
+    boxes.forEach((box) => { box.disabled = false; });
     playlistRun.disabled = selectedPlaylist.size === 0;
   }
 });
@@ -205,7 +229,7 @@ async function loadFeed(reset = false) {
     const response = await fetch(`/api/feed?offset=${feedOffset}&limit=12`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.detail || `HTTP ${response.status}`);
+      throw new Error(apiError(data, response.status));
     }
     for (const item of data.items || []) {
       if (feedSeen.has(item.id)) continue;
@@ -305,11 +329,17 @@ form.addEventListener("submit", async (event) => {
   if (!source) return;
 
   if (mode === "playlist") {
+    const submitButton = document.getElementById("submit");
+    submitButton.disabled = true;
     try {
       await loadPlaylist(source);
     } catch (err) {
+      playlistTitle.textContent = "Не удалось загрузить плейлист";
+      playlistCount.textContent = "";
       formError.textContent = err.message;
       formError.classList.remove("hidden");
+    } finally {
+      submitButton.disabled = false;
     }
     return;
   }
@@ -323,7 +353,7 @@ form.addEventListener("submit", async (event) => {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.detail || `HTTP ${response.status}`);
+      throw new Error(apiError(data, response.status));
     }
     const job = await response.json();
     renderJob(job);

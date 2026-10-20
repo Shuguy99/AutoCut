@@ -227,3 +227,5 @@ input.flash {
   .tagline { display: none; }
   .topbar { padding-top: 18px; }
 }
+
+.playlist-item.no-thumb { grid-template-columns: auto 1fr; }
