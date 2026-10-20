@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoCut — клипы из YouTube</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">AutoCut<span class="dot">.</span></div>
+    <div class="tagline">видео → вертикальные клипы с субтитрами</div>
+  </header>
+
+  <main>
+    <section class="card form-card">
+      <form id="job-form">
+        <label class="field">
+          <span>Ссылка YouTube или путь к файлу</span>
+          <input id="source" name="source" type="text" required
+                 placeholder="https://youtu.be/... или /home/user/video.mp4">
+        </label>
+
+        <div class="row">
+          <label class="field small">
+            <span>Клипов</span>
+            <input id="clips" type="number" min="1" max="50" value="5">
+          </label>
+          <label class="field small">
+            <span>Мин. длина, с</span>
+            <input id="min-duration" type="number" min="5" max="120" value="20">
+          </label>
+          <label class="field small">
+            <span>Макс. длина, с</span>
+            <input id="max-duration" type="number" min="10" max="180" value="60">
+          </label>
+          <label class="field small">
+            <span>Формат кадра</span>
+            <select id="layout">
+              <option value="blur">Размытый фон</option>
+              <option value="crop">Кроп по центру</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Прокси (необязательно)</span>
+          <input id="proxy" type="text" placeholder="socks5://127.0.0.1:1080">
+        </label>
+
+        <button id="submit" type="submit">Сделать клипы</button>
+        <p id="form-error" class="error hidden"></p>
+      </form>
+    </section>
+
+    <section id="jobs" class="jobs"></section>
+  </main>
+
+  <template id="job-template">
+    <article class="card job">
+      <div class="job-head">
+        <div class="job-title"></div>
+        <button class="cancel" type="button">Отменить</button>
+      </div>
+      <div class="progress"><div class="bar"></div></div>
+      <div class="job-status"></div>
+      <div class="folder"></div>
+      <div class="clips"></div>
+    </article>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -119,7 +119,7 @@ tests/
 - `blur` (по умолчанию): фон — исходник scale+crop до 1080×1920 с `gblur=sigma=30`; поверх — исходник целиком по ширине 1080, по центру.
 - `crop`: scale до заполнения 1080×1920 и центральный кроп.
 - Вжигание ASS через фильтр `subtitles`, путь экранируется.
-- Кодек: libx264, `preset veryfast`, CRF 20, `-movflags +faststart`, AAC 128 kbps 48 kHz; 30 fps.
+- Кодек: H.264, `-movflags +faststart`, AAC 128 kbps 48 kHz, 30 fps. Энкодер выбирается автоматически коротким тестовым прогоном: `libx264` (CRF 20, preset veryfast) → `h264_vaapi` → `h264_nvenc` → `libopenh264` → `mpeg4` (QP 4). Причина фолбэка: в Fedora-сборке `ffmpeg-free` нет libx264, а на AMD Vega этого ноутбука VAAPI/OpenH264 не заводятся.
 - Превью: jpg из середины клипа.
 - Если исходник короче минимальной длины — один клип на всё видео с предупреждением.
 
@@ -176,7 +176,7 @@ Defaults в `config.py`, переопределение через `config.yaml`
 
 ## 6. Зависимости
 
-`yt-dlp`, `faster-whisper`, `numpy`, `fastapi`, `uvicorn`, `pydantic`, `PyYAML`; dev: `pytest`, `httpx`. Системные: `ffmpeg`/`ffprobe` (уже есть).
+`yt-dlp`, `numpy`, `fastapi`, `uvicorn`, `pydantic`, `PyYAML`; extras: `faster-whisper` (`.[whisper]`, тяжёлый стек ctranslate2/onnxruntime/av ставится отдельно), dev: `pytest`, `httpx`. Системные: `ffmpeg`/`ffprobe`.
 
 Python 3.14: wheel `ctranslate2` для cp314 проверен.
 

@@ -1,0 +1,11 @@
+output_dir: output
+work_dir: work
+model: small
+device: cpu
+compute_type: int8
+# proxy: socks5://127.0.0.1:1080
+# cookies: /path/to/cookies.txt
+ascii_slug: false
+keep_work: false
+language: null
+max_height: 1080
