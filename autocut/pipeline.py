@@ -20,10 +20,23 @@ from .storage import (
     write_json,
     write_srt,
 )
-from .subtitles import group_words, write_ass
+from .subtitles import Cue, group_words, write_ass
 from .transcribe import transcribe
 
 ProgressFn = Callable[[str, float, str], None]
+
+
+def _preview_time(cues: list[Cue], start: float, end: float) -> float:
+    """Момент для превью: середина реплики, ближайшей к центру клипа.
+
+    Иначе кадр может попасть в паузу между субтитрами, и превью будет без них.
+    """
+    length = max(0.1, end - start)
+    if not cues:
+        return length / 2
+    center = start + length / 2
+    cue = min(cues, key=lambda item: abs((item.start + item.end) / 2 - center))
+    return min(max(0.0, (cue.start + cue.end) / 2 - start), length - 0.05)
 
 
 class PipelineError(RuntimeError):
@@ -156,7 +169,8 @@ def run_pipeline(
                     ass_path, out_path, layout=options.layout,
                 )
                 preview = render_preview(
-                    out_path, result_dir / "clips" / f"clip_{index:02d}.jpg"
+                    out_path, result_dir / "clips" / f"clip_{index:02d}.jpg",
+                    at=_preview_time(cues, candidate.start, candidate.end),
                 )
                 final_ass = result_dir / "clips" / f"clip_{index:02d}.ass"
                 shutil.copy2(ass_path, final_ass)

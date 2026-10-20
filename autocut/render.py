@@ -79,5 +79,7 @@ def render_clip(
     return out_path
 
 
-def render_preview(video: Path | str, out_path: Path) -> Path:
-    return make_preview(video, out_path)
+def render_preview(
+    video: Path | str, out_path: Path, at: float | None = None
+) -> Path:
+    return make_preview(video, out_path, at=at)

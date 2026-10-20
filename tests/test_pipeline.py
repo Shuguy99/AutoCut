@@ -52,6 +52,19 @@ def test_pipeline_local_file(sample_video: Path, config: Config, fake_transcript
     assert events[-1][1] == 100
 
 
+def test_preview_time_picks_cue_midpoint():
+    from autocut.pipeline import _preview_time
+    from autocut.subtitles import Cue
+
+    cues = [Cue(10.0, 12.0, "a"), Cue(20.0, 24.0, "b")]
+    # центр клипа 20 с ближе к середине второй реплики (22 с)
+    assert _preview_time(cues, 10.0, 30.0) == pytest.approx(12.0)
+    # без реплик — середина клипа
+    assert _preview_time([], 10.0, 30.0) == pytest.approx(10.0)
+    # момент не выходит за пределы клипа
+    assert _preview_time([Cue(40.0, 44.0, "c")], 10.0, 12.0) == pytest.approx(1.95)
+
+
 def test_pipeline_cancel(sample_video: Path, config: Config, fake_transcript):
     options = JobOptions(clips=1, min_duration=2, max_duration=4, target_duration=3)
     with pytest.raises(CancelledError):
