@@ -6,7 +6,13 @@ import sys
 from pathlib import Path
 
 from .config import load_config
-from .downloader import DownloadError, get_trending
+from .downloader import (
+    DownloadError,
+    NotAPlaylistError,
+    get_trending,
+    is_url,
+    list_playlist,
+)
 from .media import MediaError
 from .models import JobOptions
 from .pipeline import PipelineError, run_pipeline
@@ -52,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = sub.add_parser("run", help="обработать ссылку или файл")
     run_parser.add_argument("source")
     _add_common(run_parser)
+    run_parser.add_argument(
+        "--playlist-limit",
+        type=int,
+        default=1,
+        metavar="N",
+        help="сколько видео из плейлиста обработать (1–50)",
+    )
 
     trending = sub.add_parser(
         "trending", help="взять верхнее видео из ленты популярного YouTube"
@@ -105,9 +118,50 @@ def _print_result(result: dict, as_json: bool) -> None:
         )
 
 
+JOB_ERRORS = (
+    PipelineError, DownloadError, TranscriptionError, MediaError, RenderError
+)
+
+
+def _run_playlist(args, options, config, progress) -> int:
+    try:
+        playlist = list_playlist(
+            args.source,
+            limit=args.playlist_limit,
+            proxy=args.proxy or config.proxy,
+            cookies=args.cookies or config.cookies,
+        )
+    except DownloadError as exc:
+        print(f"Ошибка: {exc}", file=sys.stderr)
+        return 1
+
+    failures = 0
+    for item in playlist.items:
+        print(f"\n=== {item.title} ===", file=sys.stderr)
+        try:
+            result = run_pipeline(
+                item.url, options, config, progress=progress
+            )
+        except JOB_ERRORS as exc:
+            failures += 1
+            print(f"Ошибка: {exc}", file=sys.stderr)
+            continue
+        _print_result(result, args.json)
+
+    done = len(playlist.items) - failures
+    print(
+        f"\nОбработано {done} из {len(playlist.items)}", file=sys.stderr
+    )
+    return 1 if failures else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    playlist_limit = getattr(args, "playlist_limit", 1)
+    if not 1 <= playlist_limit <= 50:
+        parser.error("--playlist-limit должен быть от 1 до 50")
 
     if args.command == "web":
         import uvicorn
@@ -132,12 +186,16 @@ def main(argv: list[str] | None = None) -> int:
                 cookies=args.cookies or config.cookies,
             )
             print(f"Выбрано видео: {source}", file=sys.stderr)
+        elif (
+            args.command == "run"
+            and args.playlist_limit > 1
+            and is_url(args.source)
+        ):
+            return _run_playlist(args, options, config, progress)
         else:
             source = args.source
         result = run_pipeline(source, options, config, progress=progress)
-    except (
-        PipelineError, DownloadError, TranscriptionError, MediaError, RenderError
-    ) as exc:
+    except JOB_ERRORS as exc:
         print(f"Ошибка: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
