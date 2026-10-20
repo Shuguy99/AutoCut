@@ -13,6 +13,16 @@
   </header>
 
   <main>
+    <section class="card feed-card">
+      <div class="section-head">
+        <h2>Лента RuTube</h2>
+        <button id="feed-refresh" class="ghost" type="button">Обновить</button>
+      </div>
+      <div id="feed" class="feed-grid"></div>
+      <div id="feed-state" class="feed-state"></div>
+      <button id="feed-more" class="ghost hidden" type="button">Показать ещё</button>
+    </section>
+
     <section class="card form-card">
       <form id="job-form">
         <label class="field">
@@ -66,6 +76,17 @@
       <div class="job-status"></div>
       <div class="folder"></div>
       <div class="clips"></div>
+    </article>
+  </template>
+
+  <template id="feed-card-template">
+    <article class="feed-item">
+      <img alt="" loading="lazy">
+      <div class="feed-body">
+        <div class="feed-title"></div>
+        <div class="feed-meta"></div>
+        <button class="feed-pick ghost" type="button">В форму</button>
+      </div>
     </article>
   </template>
 

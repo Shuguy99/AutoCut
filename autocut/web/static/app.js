@@ -3,6 +3,14 @@ const jobsRoot = document.getElementById("jobs");
 const formError = document.getElementById("form-error");
 const template = document.getElementById("job-template");
 const cards = new Map();
+const feedRoot = document.getElementById("feed");
+const feedState = document.getElementById("feed-state");
+const feedMore = document.getElementById("feed-more");
+const feedRefresh = document.getElementById("feed-refresh");
+const feedTemplate = document.getElementById("feed-card-template");
+const feedSeen = new Set();
+let feedOffset = 0;
+let feedLoading = false;
 let pollTimer = null;
 
 const stageNames = {
@@ -12,6 +20,90 @@ const stageNames = {
 };
 
 function el(selector, root = document) { return root.querySelector(selector); }
+
+function formatViews(value) {
+  const count = Number(value) || 0;
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1).replace(".", ",")} млн`;
+  }
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1).replace(".", ",")} тыс.`;
+  }
+  return String(count);
+}
+
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  const total = Math.round(Number(seconds));
+  if (!Number.isFinite(total)) return "—";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function feedCard(item) {
+  const node = feedTemplate.content.firstElementChild.cloneNode(true);
+  const image = el("img", node);
+  if (item.thumbnail) {
+    image.src = item.thumbnail;
+    image.alt = item.title;
+  } else {
+    image.remove();
+  }
+  el(".feed-title", node).textContent = item.title;
+  el(".feed-meta", node).textContent =
+    `${item.channel} · ${formatDuration(item.duration)} · ${formatViews(item.views)}`;
+  el(".feed-pick", node).addEventListener("click", () => {
+    const input = document.getElementById("source");
+    input.value = item.url;
+    input.focus();
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.classList.add("flash");
+    setTimeout(() => input.classList.remove("flash"), 1200);
+  });
+  return node;
+}
+
+async function loadFeed(reset = false) {
+  if (feedLoading) return;
+  feedLoading = true;
+  if (reset) {
+    feedSeen.clear();
+    feedRoot.innerHTML = "";
+    feedOffset = 0;
+    feedMore.classList.add("hidden");
+  }
+  feedState.classList.remove("error");
+  feedState.textContent = "Загружаем ленту…";
+  try {
+    const response = await fetch(`/api/feed?offset=${feedOffset}&limit=12`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || `HTTP ${response.status}`);
+    }
+    for (const item of data.items || []) {
+      if (feedSeen.has(item.id)) continue;
+      feedSeen.add(item.id);
+      feedRoot.append(feedCard(item));
+    }
+    feedOffset = data.next_offset ?? feedOffset + 12;
+    feedMore.classList.toggle("hidden", !data.has_more);
+    feedState.textContent = feedSeen.size ? "" : "Лента пуста.";
+  } catch (err) {
+    feedState.textContent = `Лента недоступна: ${err.message}`;
+    feedState.classList.add("error");
+  } finally {
+    feedLoading = false;
+  }
+}
+
+feedMore.addEventListener("click", () => loadFeed(false));
+feedRefresh.addEventListener("click", () => loadFeed(true));
+loadFeed(true);
 
 function getCard(job) {
   if (cards.has(job.id)) return cards.get(job.id);
