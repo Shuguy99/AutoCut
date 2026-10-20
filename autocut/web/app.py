@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..config import Config, load_config
+from ..feed import FeedError, fetch_feed
 from ..jobs import Job, JobManager, QueueFullError
 from ..models import JobOptions
 
@@ -68,6 +69,22 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+    @app.get("/api/feed")
+    def get_feed(offset: int = 0, limit: int = 12) -> dict:
+        if not (1 <= limit <= 24) or offset < 0:
+            raise HTTPException(
+                status_code=422, detail="limit должен быть 1–24, offset ≥ 0"
+            )
+        try:
+            page = fetch_feed(offset=offset, limit=limit)
+        except FeedError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {
+            "items": page.items,
+            "next_offset": offset + limit,
+            "has_more": page.has_more,
+        }
 
     @app.post("/api/jobs")
     def create_job(request: CreateJobRequest) -> dict:

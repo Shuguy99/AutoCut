@@ -2,7 +2,9 @@ import time
 
 from fastapi.testclient import TestClient
 
+from autocut import feed as feed_module
 from autocut.config import Config
+from autocut.feed import FeedPage
 from autocut.jobs import JobManager
 from autocut.web.app import create_app
 
@@ -67,3 +69,47 @@ def test_index(config: Config):
     response = client.get("/")
     assert response.status_code == 200
     assert "AutoCut" in response.text
+
+
+def test_feed_endpoint(config: Config, monkeypatch):
+    page = FeedPage(
+        items=[{
+            "id": "v1", "title": "T", "channel": "C", "duration": 300.0,
+            "views": 5, "thumbnail": None,
+            "url": "https://rutube.ru/video/v1/", "created_at": None,
+        }],
+        has_more=True,
+    )
+    calls = {}
+
+    def fake_fetch(offset=0, limit=12):
+        calls.update(offset=offset, limit=limit)
+        return page
+
+    monkeypatch.setattr("autocut.web.app.fetch_feed", fake_fetch)
+    client = _client(config)
+    response = client.get("/api/feed?offset=12&limit=6")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"][0]["id"] == "v1"
+    assert data["next_offset"] == 18
+    assert data["has_more"] is True
+    assert calls == {"offset": 12, "limit": 6}
+
+
+def test_feed_endpoint_error(config: Config, monkeypatch):
+    def boom(offset=0, limit=12):
+        raise feed_module.FeedError("лента RuTube недоступна: timeout")
+
+    monkeypatch.setattr("autocut.web.app.fetch_feed", boom)
+    client = _client(config)
+    response = client.get("/api/feed")
+    assert response.status_code == 502
+    assert "недоступна" in response.json()["detail"]
+
+
+def test_feed_endpoint_validates_limit(config: Config):
+    client = _client(config)
+    assert client.get("/api/feed?limit=100").status_code == 422
+    assert client.get("/api/feed?offset=-1").status_code == 422
