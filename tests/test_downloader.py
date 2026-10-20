@@ -10,6 +10,11 @@ def test_is_url():
     assert not downloader.is_url("/tmp/video.mp4")
 
 
+def test_is_url_accepts_other_yt_dlp_sites():
+    assert downloader.is_url("https://rutube.ru/video/8c31b60faaca8547a2c1ec265fae39e8/")
+    assert downloader.is_url("https://vk.com/video-123_456")
+
+
 def test_prepare_local(sample_video: Path):
     info = downloader.prepare_local(sample_video)
     assert info.source_path == sample_video.resolve()
