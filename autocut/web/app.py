@@ -31,6 +31,11 @@ class CreateJobRequest(BaseModel):
     options: JobOptions = Field(default_factory=JobOptions)
 
 
+class BatchJobRequest(BaseModel):
+    sources: list[str] = Field(min_length=1, max_length=20)
+    options: JobOptions = Field(default_factory=JobOptions)
+
+
 class PlaylistRequest(BaseModel):
     url: str = Field(min_length=1)
     limit: int = Field(30, ge=1, le=50)
@@ -70,7 +75,7 @@ def create_app(
     config: Config | None = None, manager: JobManager | None = None
 ) -> FastAPI:
     config = config or load_config()
-    manager = manager or JobManager(config)
+    manager = manager or JobManager(config, max_queue=20)
     app = FastAPI(title="AutoCut", version="0.1.0")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -120,6 +125,23 @@ def create_app(
         except QueueFullError as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         return _job_payload(job, config)
+
+    @app.post("/api/jobs/batch")
+    def create_jobs(request: BatchJobRequest) -> dict:
+        sources = [
+            source.strip()
+            for source in request.sources
+            if source.strip()
+        ]
+        if not sources:
+            raise HTTPException(
+                status_code=422, detail="нужен хотя бы один источник"
+            )
+        try:
+            jobs = manager.submit_many(sources, request.options)
+        except QueueFullError as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        return {"jobs": [_job_payload(job, config) for job in jobs]}
 
     @app.get("/api/jobs")
     def list_jobs() -> list[dict]:

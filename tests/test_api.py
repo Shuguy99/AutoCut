@@ -1,3 +1,4 @@
+import threading
 import time
 
 from fastapi.testclient import TestClient
@@ -7,7 +8,7 @@ from autocut.config import Config
 from autocut.downloader import DownloadError, NotAPlaylistError
 from autocut.feed import FeedPage
 from autocut.jobs import JobManager
-from autocut.models import PlaylistInfo, PlaylistItem
+from autocut.models import JobOptions, PlaylistInfo, PlaylistItem
 from autocut.web.app import create_app
 
 
@@ -178,3 +179,51 @@ def test_playlist_endpoint_validates_limit(config: Config):
         "/api/playlist", json={"url": "https://x", "limit": 0}
     )
     assert response.status_code == 422
+
+
+def test_batch_jobs(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs/batch", json={
+        "sources": ["/tmp/a.mp4", "/tmp/b.mp4"],
+        "options": {"clips": 1},
+    })
+    assert response.status_code == 200
+    jobs = response.json()["jobs"]
+    assert len(jobs) == 2
+    assert {job["source"] for job in jobs} == {"/tmp/a.mp4", "/tmp/b.mp4"}
+
+
+def test_batch_jobs_validates_sources(config: Config):
+    client = _client(config)
+    assert client.post(
+        "/api/jobs/batch", json={"sources": [], "options": {}}
+    ).status_code == 422
+    assert client.post(
+        "/api/jobs/batch",
+        json={"sources": ["/tmp/x.mp4"] * 21, "options": {}},
+    ).status_code == 422
+
+
+def test_batch_jobs_queue_full(config: Config):
+    gate = threading.Event()
+
+    def runner(source, options, config, progress=None, is_cancelled=None):
+        gate.wait(3)
+        return {"clips": []}
+
+    manager = JobManager(config, runner=runner, max_queue=1)
+    manager.submit("/tmp/busy.mp4", JobOptions(clips=1))
+    for _ in range(100):
+        if manager.list()[0].status == "running":
+            break
+        time.sleep(0.02)
+
+    client = TestClient(create_app(config, manager))
+    response = client.post("/api/jobs/batch", json={
+        "sources": ["/tmp/a.mp4", "/tmp/b.mp4"],
+        "options": {"clips": 1},
+    })
+    assert response.status_code == 429
+
+    gate.set()
+    manager.shutdown()
