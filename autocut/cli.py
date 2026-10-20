@@ -44,7 +44,8 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="autocut", description="YouTube → вертикальные клипы"
+        prog="autocut",
+        description="Ссылка (YouTube, RuTube, …) или файл → вертикальные клипы",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -53,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(run_parser)
 
     trending = sub.add_parser(
-        "trending", help="взять верхнее видео из ленты популярного"
+        "trending", help="взять верхнее видео из ленты популярного YouTube"
     )
     trending.add_argument("--region", default="RU")
     _add_common(trending)
