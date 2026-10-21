@@ -6,7 +6,7 @@
 
 1. скачивает видео по ссылке через yt-dlp (YouTube, RuTube и другие поддерживаемые сайты) или берёт локальный файл;
 2. находит N самых «живых» фрагментов длиной 20–60 секунд по громкости, речи и сменам сцен;
-3. распознаёт речь через faster-whisper и вжигает небольшие субтитры снизу;
+3. распознаёт речь через faster-whisper и вжигает небольшие субтитры снизу (отключается `--no-subtitles`);
 4. сохраняет клипы по папкам на каждое исходное видео.
 
 ## Установка
@@ -40,6 +40,7 @@ mpeg4), потому что в Fedora-сборке `ffmpeg-free` нет libx264.
 ```
 
 Откройте http://127.0.0.1:8000, вставьте ссылку (YouTube, RuTube, …) или путь к локальному файлу.
+Галочка «Субтитры» снимается, если клипы нужны без вжигаемых субтитров.
 
 ## CLI
 
@@ -47,6 +48,7 @@ mpeg4), потому что в Fedora-сборке `ffmpeg-free` нет libx264.
 .venv/bin/autocut run "https://youtu.be/..." --clips 5
 .venv/bin/autocut run "https://rutube.ru/video/..." --clips 3
 .venv/bin/autocut run ./video.mp4 --clips 3 --format crop
+.venv/bin/autocut run ./video.mp4 --no-subtitles
 .venv/bin/autocut trending --region RU
 ```
 
@@ -57,7 +59,7 @@ mpeg4), потому что в Fedora-сборке `ffmpeg-free` нет libx264.
 ```
 output/<канал>/<video_id>_<название>/
   clips/clip_01_score-0.87.mp4
-  clips/clip_01.ass
+  clips/clip_01.ass        # только при включённых субтитрах
   clips/clip_01.jpg
   transcript.srt
   transcript.json

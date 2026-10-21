@@ -35,6 +35,10 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cookies", default=None)
     parser.add_argument("--output", default=None, help="папка результатов")
     parser.add_argument("--config", default=None, help="путь к config.yaml")
+    parser.add_argument(
+        "--no-subtitles", dest="subtitles", action="store_false",
+        help="не вжигать субтитры в клипы",
+    )
     parser.add_argument("--keep-work", action="store_true")
     parser.add_argument("--ascii-slug", action="store_true")
     parser.add_argument(
@@ -78,6 +82,7 @@ def options_from_args(args: argparse.Namespace) -> JobOptions:
         cookies=args.cookies,
         model=args.model,
         language=args.language,
+        subtitles=args.subtitles,
     )
 
 

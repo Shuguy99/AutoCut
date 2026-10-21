@@ -36,3 +36,19 @@ def test_render_crop_clip(sample_video: Path, tmp_path: Path):
 def test_render_preview(sample_video: Path, tmp_path: Path):
     out = render_preview(sample_video, tmp_path / "preview.jpg")
     assert out.exists() and out.stat().st_size > 1000
+
+
+def test_render_clip_without_subtitles(sample_video: Path, tmp_path: Path):
+    out = render_clip(
+        sample_video, 0.0, 3.0, None, tmp_path / "clean.mp4", layout="blur"
+    )
+    info = probe(out)
+    assert (info.width, info.height) == (1080, 1920)
+    assert info.has_audio is True
+    assert out.stat().st_size > 10_000
+
+    out_crop = render_clip(
+        sample_video, 1.0, 3.0, None, tmp_path / "clean_crop.mp4",
+        layout="crop",
+    )
+    assert (probe(out_crop).width, probe(out_crop).height) == (1080, 1920)

@@ -153,13 +153,17 @@ def run_pipeline(
                 f"рендер клипа {index} из {len(cliplist)}",
             )
             try:
-                clip_words = [
-                    word for word in transcript.words
-                    if word.end > candidate.start and word.start < candidate.end
-                ]
-                cues = group_words(clip_words)
-                ass_path = work_dir / f"clip_{index:02d}.ass"
-                write_ass(cues, ass_path, candidate.start, candidate.end)
+                cues: list[Cue] = []
+                ass_path: Path | None = None
+                if options.subtitles:
+                    clip_words = [
+                        word for word in transcript.words
+                        if word.end > candidate.start
+                        and word.start < candidate.end
+                    ]
+                    cues = group_words(clip_words)
+                    ass_path = work_dir / f"clip_{index:02d}.ass"
+                    write_ass(cues, ass_path, candidate.start, candidate.end)
                 filename = (
                     f"clip_{index:02d}_score-{candidate.score:.2f}.mp4"
                 )
@@ -172,13 +176,16 @@ def run_pipeline(
                     out_path, result_dir / "clips" / f"clip_{index:02d}.jpg",
                     at=_preview_time(cues, candidate.start, candidate.end),
                 )
-                final_ass = result_dir / "clips" / f"clip_{index:02d}.ass"
-                shutil.copy2(ass_path, final_ass)
+                final_ass: str | None = None
+                if ass_path is not None:
+                    copied = result_dir / "clips" / f"clip_{index:02d}.ass"
+                    shutil.copy2(ass_path, copied)
+                    final_ass = str(copied)
                 clips.append({
                     "index": index,
                     "file": str(out_path),
                     "preview": str(preview),
-                    "subtitle": str(final_ass),
+                    "subtitle": final_ass,
                     "start": candidate.start,
                     "end": candidate.end,
                     "duration": round(candidate.end - candidate.start, 3),

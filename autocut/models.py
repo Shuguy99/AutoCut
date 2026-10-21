@@ -70,6 +70,7 @@ class JobOptions(BaseModel):
     cookies: str | None = None
     model: str | None = None
     language: str | None = None
+    subtitles: bool = True
 
     @model_validator(mode="after")
     def _validate(self) -> "JobOptions":
