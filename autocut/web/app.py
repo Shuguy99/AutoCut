@@ -69,6 +69,11 @@ def create_app(
     def index() -> str:
         return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
+    @app.get("/health")
+    @app.get("/api/health")
+    def health() -> dict:
+        return {"status": "ok"}
+
     @app.post("/api/jobs")
     def create_job(request: CreateJobRequest) -> dict:
         try:
