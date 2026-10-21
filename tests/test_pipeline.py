@@ -52,6 +52,21 @@ def test_pipeline_local_file(sample_video: Path, config: Config, fake_transcript
     assert events[-1][1] == 100
 
 
+def test_pipeline_without_subtitles(sample_video: Path, config: Config, fake_transcript):
+    options = JobOptions(
+        clips=1, min_duration=2, max_duration=4, target_duration=3,
+        subtitles=False,
+    )
+    result = run_pipeline(str(sample_video), options, config)
+    result_dir = Path(result["result_dir"])
+    clip = result["clips"][0]
+    assert clip["subtitle"] is None
+    assert Path(clip["file"]).exists()
+    assert Path(clip["preview"]).exists()
+    assert not list((result_dir / "clips").glob("*.ass"))
+    assert (result_dir / "transcript.srt").exists()
+
+
 def test_preview_time_picks_cue_midpoint():
     from autocut.pipeline import _preview_time
     from autocut.subtitles import Cue

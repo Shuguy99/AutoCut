@@ -9,6 +9,13 @@ def test_run_defaults():
     assert args.min_duration == 20
     assert args.max_duration == 60
     assert args.layout == "blur"
+    assert args.subtitles is True
+
+
+def test_run_no_subtitles_flag():
+    args = build_parser().parse_args(["run", "video.mp4", "--no-subtitles"])
+    assert args.subtitles is False
+    assert options_from_args(args).subtitles is False
 
 
 def test_job_options_from_args():

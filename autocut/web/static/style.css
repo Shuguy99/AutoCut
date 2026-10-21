@@ -64,6 +64,16 @@ input:focus, select:focus { border-color: var(--accent); }
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .field.small { flex: 1 1 140px; }
 
+.field.toggle { align-content: end; }
+.field.toggle input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 11px 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 button {
   background: linear-gradient(90deg, var(--accent), #a16bff);
   border: none;

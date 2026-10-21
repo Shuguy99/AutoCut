@@ -96,6 +96,7 @@ form.addEventListener("submit", async (event) => {
       min_duration: Number(document.getElementById("min-duration").value),
       max_duration: Number(document.getElementById("max-duration").value),
       layout: document.getElementById("layout").value,
+      subtitles: document.getElementById("subtitles").checked,
       proxy: document.getElementById("proxy").value.trim() || null,
     },
   };
