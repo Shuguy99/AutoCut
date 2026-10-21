@@ -67,3 +67,11 @@ def test_index(config: Config):
     response = client.get("/")
     assert response.status_code == 200
     assert "AutoCut" in response.text
+
+
+def test_health(config: Config):
+    client = _client(config)
+    for path in ("/health", "/api/health"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
