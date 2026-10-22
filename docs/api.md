@@ -114,6 +114,7 @@ ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<wor
     "target_duration": 30,
     "layout": "blur",
     "crop_focus": "center",
+    "ranges": [[12, 42], [65, 100]],
     "subtitles": true,
     "variation": "subtle",
     "style": "auto",
@@ -135,6 +136,7 @@ ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<wor
 |---|---|---|---|
 | `layout` | `blur`/`crop` | `blur` | фон или кроп 9:16 |
 | `crop_focus` | `center`/`left`/`right` | `center` | смещение кропа |
+| `ranges` | `[[start,end], …]` \| null | `null` | ручные диапазоны; отключает автоанализ |
 | `variation` | `off`/`subtle`/`strong` | `subtle` | сила различий между клипами |
 | `style` | `auto`/`clean`/`bold`/`karaoke`/`minimal` | `auto` | стиль субтитров |
 | `caption_mode` | `phrase`/`word` | `phrase` | фразы или подсветка слов |
@@ -144,7 +146,10 @@ ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<wor
 | `loudnorm` | bool | `true` | громкость −14 LUFS |
 | `safe_zones` | bool | `true` | отступ под интерфейс TikTok |
 
-Ошибка `422` — неизвестный стиль/режим или слишком длинный `watermark`.
+Ошибка `422` — неизвестный стиль/режим, слишком длинный `watermark` или
+некорректный диапазон (`end <= start`, длина вне 1–300 с, больше 50 пар).
+Если `ranges` задан, поля `clips`, `min_duration`, `max_duration` и
+`target_duration` не влияют на нарезку.
 Ошибка `429` — очередь заполнена.
 
 Ответ — объект задачи (см. ниже) со статусом `queued`.

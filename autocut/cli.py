@@ -24,6 +24,50 @@ from .render import RenderError
 from .transcribe import TranscriptionError
 
 
+def _parse_time(value: str) -> float:
+    """Разбирает секунды, ``MM:SS`` или ``HH:MM:SS``."""
+    parts = value.strip().split(":")
+    try:
+        numbers = [float(part) for part in parts]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "время должно быть числом, MM:SS или HH:MM:SS"
+        ) from exc
+    if len(numbers) == 1:
+        return numbers[0]
+    if len(numbers) == 2:
+        minutes, seconds = numbers
+        return minutes * 60 + seconds
+    if len(numbers) == 3:
+        hours, minutes, seconds = numbers
+        return hours * 3600 + minutes * 60 + seconds
+    raise argparse.ArgumentTypeError("слишком много частей во времени")
+
+
+def _parse_range(value: str) -> tuple[float, float]:
+    """Разбирает диапазон ``12-42``, ``1:05-1:40`` или ``0:10:00-0:12:30``."""
+    text = value.strip().replace("–", "-").replace("—", "-")
+    if "-" in text:
+        left, right = text.rsplit("-", 1)
+    elif ":" in text:
+        left, right = text.split(":", 1)
+    else:
+        raise argparse.ArgumentTypeError(
+            "диапазон должен быть в формате START-END, например 12-42"
+        )
+    start = _parse_time(left)
+    end = _parse_time(right)
+    if start < 0 or end <= start:
+        raise argparse.ArgumentTypeError(
+            f"некорректный диапазон {value!r}"
+        )
+    if not 1 <= end - start <= 300:
+        raise argparse.ArgumentTypeError(
+            "длина ручного диапазона должна быть от 1 до 300 секунд"
+        )
+    return start, end
+
+
 def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--clips", type=int, default=5, help="сколько клипов сделать"
@@ -32,6 +76,11 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max", dest="max_duration", type=float, default=60)
     parser.add_argument(
         "--target", dest="target_duration", type=float, default=30
+    )
+    parser.add_argument(
+        "--range", dest="ranges", action="append", type=_parse_range,
+        metavar="START-END",
+        help="ручной фрагмент в секундах; можно указать несколько раз",
     )
     parser.add_argument(
         "--format", dest="layout", choices=["blur", "crop"], default="blur"
@@ -147,6 +196,7 @@ def options_from_args(args: argparse.Namespace) -> JobOptions:
         min_duration=args.min_duration,
         max_duration=args.max_duration,
         target_duration=args.target_duration,
+        ranges=args.ranges or None,
         layout=args.layout,
         crop_focus=args.crop_focus,
         subtitles=args.subtitles,

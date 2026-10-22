@@ -49,7 +49,7 @@ main {
 .field { display: grid; gap: 6px; margin-bottom: 14px; }
 .field span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
 
-input, select, button {
+input, select, textarea, button {
   font: inherit;
   border-radius: 10px;
   border: 1px solid var(--border);

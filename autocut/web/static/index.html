@@ -78,6 +78,14 @@
         </div>
 
         <label class="field">
+          <span>Ручные диапазоны (необязательно)</span>
+          <textarea id="ranges" rows="2"
+                    placeholder="12-42; 1:05-1:40 — по одному на строку"></textarea>
+          <small>Если указаны, AutoCut не ищет моменты сам, а режет ровно эти
+            фрагменты.</small>
+        </label>
+
+        <label class="field">
           <span>Прокси (необязательно)</span>
           <input id="proxy" type="text" placeholder="socks5://127.0.0.1:1080">
         </label>

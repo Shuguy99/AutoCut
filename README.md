@@ -14,8 +14,10 @@
 4. делает клипы из одной пачки разными: чередует стили субтитров, выбирает
    более сильный хук, добавляет финальную плашку и водяной знак, слегка меняет
    кадрирование и цветокоррекцию; кроп можно сместить влево или вправо;
-5. нормализует громкость до −14 LUFS и проверяет текстовую похожесть клипов;
-6. сохраняет клипы, `diversity.json` и черновики подписей `publish.json` по
+5. умеет резать точно заданные вручную диапазоны (`--range 12-42`) без
+   автоанализа, если нужные моменты уже известны;
+6. нормализует громкость до −14 LUFS и проверяет текстовую похожесть клипов;
+7. сохраняет клипы, `diversity.json` и черновики подписей `publish.json` по
    папкам на каждое исходное видео.
 
 Вариативность не заменяет содержательную переработку чужого видео и не
@@ -100,6 +102,7 @@ HTTP API (jobs, SSE, плейлисты, отдача файлов) описан
 .venv/bin/autocut run "https://rutube.ru/video/..." --clips 3
 .venv/bin/autocut run ./video.mp4 --clips 3 --format crop
 .venv/bin/autocut run ./video.mp4 --format crop --crop-focus left
+.venv/bin/autocut run ./video.mp4 --range 12-42 --range 1:05-1:40
 .venv/bin/autocut run ./video.mp4 --variation strong --watermark "@nick"
 .venv/bin/autocut run ./video.mp4 --style karaoke --caption-mode word
 .venv/bin/autocut run ./video.mp4 --no-subtitles

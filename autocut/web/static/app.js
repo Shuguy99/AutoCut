@@ -102,11 +102,60 @@ function setMode(next) {
   if (next === "video") playlistPanel.classList.add("hidden");
 }
 
+function parseTime(value) {
+  if (!value.trim()) {
+    throw new Error("Пустое время в диапазоне");
+  }
+  const parts = value.trim().split(":").map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) {
+    throw new Error(`Время «${value}» не понято. Пример: 1:05`);
+  }
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  throw new Error(`Слишком много частей во времени «${value}»`);
+}
+
+function parseRanges(raw) {
+  const items = raw.split(/[\n;]+/).map((part) => part.trim()).filter(Boolean);
+  const result = [];
+  for (const item of items) {
+    const normalized = item.replace(/[–—]/g, "-").trim();
+    let left;
+    let right;
+    const dash = normalized.lastIndexOf("-");
+    if (dash > 0) {
+      left = normalized.slice(0, dash).trim();
+      right = normalized.slice(dash + 1).trim();
+    } else {
+      const colon = normalized.indexOf(":");
+      if (colon < 0) {
+        throw new Error(`Диапазон «${item}» не понят. Пример: 12-42`);
+      }
+      left = normalized.slice(0, colon).trim();
+      right = normalized.slice(colon + 1).trim();
+    }
+    const start = parseTime(left);
+    const end = parseTime(right);
+    if (start < 0 || end <= start) {
+      throw new Error(`Некорректный диапазон «${item}»`);
+    }
+    if (end - start < 1 || end - start > 300) {
+      throw new Error(`Диапазон «${item}» должен быть от 1 до 300 секунд`);
+    }
+    result.push([start, end]);
+  }
+  return result.length ? result : null;
+}
+
 function currentOptions() {
   return {
     clips: Number(document.getElementById("clips").value),
     min_duration: Number(document.getElementById("min-duration").value),
     max_duration: Number(document.getElementById("max-duration").value),
+    ranges: parseRanges(document.getElementById("ranges").value),
     layout: document.getElementById("layout").value,
     crop_focus: document.getElementById("crop-focus").value,
     subtitles: document.getElementById("subtitles").checked,
@@ -544,10 +593,10 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  const payload = { source, options: currentOptions() };
   const submitButton = document.getElementById("submit");
   submitButton.disabled = true;
   try {
+    const payload = { source, options: currentOptions() };
     const response = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

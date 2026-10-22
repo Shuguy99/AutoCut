@@ -7,7 +7,7 @@ import pytest
 
 from autocut.config import Config
 from autocut.models import JobOptions, Segment, Transcript, Word
-from autocut.pipeline import CancelledError, _focus_pan, run_pipeline
+from autocut.pipeline import CancelledError, PipelineError, _focus_pan, run_pipeline
 
 
 @pytest.fixture
@@ -134,6 +134,32 @@ def test_transcript_cache_key_includes_model_and_language(tmp_path: Path):
     assert other is None
     assert path.parent == cache
     assert ".." not in path.name
+
+
+def test_manual_ranges_skip_auto_analysis(
+    sample_video: Path, config: Config, fake_transcript, monkeypatch
+):
+    def boom(*args, **kwargs):
+        raise AssertionError("автоанализ не должен запускаться")
+
+    monkeypatch.setattr("autocut.pipeline.detect_scenes", boom)
+    monkeypatch.setattr("autocut.pipeline.compute_rms_windows", boom)
+    options = JobOptions(
+        clips=2, min_duration=1, max_duration=10,
+        ranges=[(0.5, 2.0), (3.0, 5.0)],
+    )
+    result = run_pipeline(str(sample_video), options, config)
+    assert [
+        (clip["start"], clip["end"]) for clip in result["clips"]
+    ] == [(0.5, 2.0), (3.0, 5.0)]
+
+
+def test_manual_range_outside_video_fails(
+    sample_video: Path, config: Config, fake_transcript
+):
+    options = JobOptions(clips=1, ranges=[(0.0, 99.0)])
+    with pytest.raises(PipelineError, match="выходит"):
+        run_pipeline(str(sample_video), options, config)
 
 
 def test_pipeline_writes_variants_publish_and_diversity(

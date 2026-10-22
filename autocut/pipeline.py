@@ -15,7 +15,7 @@ import numpy as np
 from .config import Config
 from .downloader import download, is_url, prepare_local
 from .media import compute_rms_windows, detect_scenes, extract_audio, probe
-from .models import JobOptions, SourceInfo, Transcript
+from .models import ClipCandidate, JobOptions, SourceInfo, Transcript
 from .render import render_clip, render_preview
 from .scoring import find_highlights
 from .storage import (
@@ -154,10 +154,14 @@ def run_pipeline(
         duration = media.duration or info.duration
         if duration <= 0:
             raise PipelineError("не удалось определить длительность видео")
-        scenes = detect_scenes(info.source_path)
+        manual = bool(options.ranges)
+        scenes = [] if manual else detect_scenes(info.source_path)
         if media.has_audio:
             audio = extract_audio(info.source_path, work_dir / "audio.wav")
-            rms = compute_rms_windows(audio)
+            rms = (
+                np.zeros(1, dtype=np.float32) if manual
+                else compute_rms_windows(audio)
+            )
         else:
             emit(
                 "analyze", 25,
@@ -190,19 +194,37 @@ def run_pipeline(
         _check_cancel(is_cancelled)
 
         emit("score", 65, "поиск интересных фрагментов")
-        max_text_overlap = None
-        if options.variation == "strong":
-            max_text_overlap = 0.55
-        elif options.variation == "subtle":
-            max_text_overlap = 0.65
-        candidates = find_highlights(
-            duration, rms, transcript.words, scenes,
-            count=options.clips,
-            min_duration=options.min_duration,
-            max_duration=options.max_duration,
-            target_duration=options.target_duration,
-            max_text_overlap=max_text_overlap,
-        )
+        if options.ranges:
+            candidates = []
+            for start, end in options.ranges:
+                if end > duration + 0.01:
+                    raise PipelineError(
+                        f"диапазон {start:g}–{end:g} с выходит за пределы "
+                        f"видео ({duration:.1f} с)"
+                    )
+                candidates.append(
+                    ClipCandidate(
+                        start=max(0.0, start),
+                        end=min(end, duration),
+                        score=1.0,
+                        parts={"manual": 1.0},
+                    )
+                )
+            emit("score", 65, "используем ручные диапазоны")
+        else:
+            max_text_overlap = None
+            if options.variation == "strong":
+                max_text_overlap = 0.55
+            elif options.variation == "subtle":
+                max_text_overlap = 0.65
+            candidates = find_highlights(
+                duration, rms, transcript.words, scenes,
+                count=options.clips,
+                min_duration=options.min_duration,
+                max_duration=options.max_duration,
+                target_duration=options.target_duration,
+                max_text_overlap=max_text_overlap,
+            )
         if not candidates:
             raise PipelineError("не удалось найти подходящие фрагменты")
         _check_cancel(is_cancelled)

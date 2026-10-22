@@ -326,6 +326,34 @@ def test_job_accepts_crop_focus(config: Config):
     assert response.json()["options"]["crop_focus"] == "right"
 
 
+def test_job_accepts_manual_ranges(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"ranges": [[10, 40], [60, 90]]},
+    })
+    assert response.status_code == 200
+    assert response.json()["options"]["ranges"] == [[10.0, 40.0], [60.0, 90.0]]
+
+
+def test_job_rejects_invalid_manual_range(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"ranges": [[40, 10]]},
+    })
+    assert response.status_code == 422
+
+
+def test_job_rejects_malformed_manual_range(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"ranges": [[1, 2, 3]]},
+    })
+    assert response.status_code == 422
+
+
 def test_job_rejects_unknown_style(config: Config):
     client = _client(config)
     response = client.post("/api/jobs", json={

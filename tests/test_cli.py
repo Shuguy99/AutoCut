@@ -62,6 +62,24 @@ def test_crop_focus_flag():
     assert options.crop_focus == "left"
 
 
+def test_manual_ranges_from_args():
+    args = build_parser().parse_args([
+        "run", "video.mp4",
+        "--range", "12-42",
+        "--range", "1:05-1:40",
+    ])
+    options = options_from_args(args)
+    assert options.ranges == [(12.0, 42.0), (65.0, 100.0)]
+
+
+def test_invalid_manual_range_is_reported():
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args([
+            "run", "video.mp4", "--range", "42-12",
+        ])
+    assert exc.value.code == 2
+
+
 def test_uniqueness_flags():
     args = build_parser().parse_args([
         "run", "video.mp4",
