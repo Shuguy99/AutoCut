@@ -45,6 +45,17 @@
 
         <div class="row">
           <label class="field small">
+            <span>Пресет</span>
+            <select id="preset">
+              <option value="custom" selected>Свои настройки</option>
+              <option value="podcast">Подкаст</option>
+              <option value="talking_head">Говорящая голова</option>
+              <option value="cinematic">Кино</option>
+              <option value="shorts">Shorts</option>
+            </select>
+            <small>Переопределяет стиль и длительности</small>
+          </label>
+          <label class="field small">
             <span>Клипов</span>
             <input id="clips" type="number" min="1" max="50" value="5">
           </label>

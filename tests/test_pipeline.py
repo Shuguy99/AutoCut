@@ -154,6 +154,23 @@ def test_manual_ranges_skip_auto_analysis(
     ] == [(0.5, 2.0), (3.0, 5.0)]
 
 
+def test_pipeline_applies_preset(
+    sample_video: Path, config: Config, fake_transcript
+):
+    options = JobOptions(
+        clips=1, preset="shorts", ranges=[(0.0, 3.0)],
+    )
+    result = run_pipeline(str(sample_video), options, config)
+    metadata = json.loads(
+        (Path(result["result_dir"]) / "metadata.json").read_text("utf-8")
+    )
+    assert metadata["options"]["style"] == "karaoke"
+    assert metadata["options"]["caption_mode"] == "word"
+    assert metadata["options"]["layout"] == "blur"
+    assert metadata["options"]["min_duration"] == 8
+    assert result["clips"][0]["variant"]["style"] == "karaoke"
+
+
 def test_manual_range_outside_video_fails(
     sample_video: Path, config: Config, fake_transcript
 ):

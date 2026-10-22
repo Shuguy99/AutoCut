@@ -62,6 +62,14 @@ def test_crop_focus_flag():
     assert options.crop_focus == "left"
 
 
+def test_preset_flag():
+    args = build_parser().parse_args([
+        "run", "video.mp4", "--preset", "shorts",
+    ])
+    options = options_from_args(args)
+    assert options.preset == "shorts"
+
+
 def test_manual_ranges_from_args():
     args = build_parser().parse_args([
         "run", "video.mp4",

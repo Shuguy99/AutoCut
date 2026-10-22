@@ -16,6 +16,7 @@ from .config import Config
 from .downloader import download, is_url, prepare_local
 from .media import compute_rms_windows, detect_scenes, extract_audio, probe
 from .models import ClipCandidate, JobOptions, SourceInfo, Transcript
+from .presets import apply_preset
 from .render import render_clip, render_preview
 from .scoring import find_highlights
 from .storage import (
@@ -113,6 +114,7 @@ def run_pipeline(
     Исключения не глотаются: ``JobManager`` переводит их в статус ``failed``,
     а CLI печатает понятное сообщение.
     """
+    options = apply_preset(options)
     report = progress or (lambda stage, pct, msg: None)
     output_dir = Path(config.output_dir).expanduser().resolve()
     work_root = Path(config.work_dir).expanduser().resolve()

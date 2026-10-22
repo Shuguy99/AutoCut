@@ -153,6 +153,7 @@ function parseRanges(raw) {
 function currentOptions() {
   return {
     clips: Number(document.getElementById("clips").value),
+    preset: document.getElementById("preset").value,
     min_duration: Number(document.getElementById("min-duration").value),
     max_duration: Number(document.getElementById("max-duration").value),
     ranges: parseRanges(document.getElementById("ranges").value),

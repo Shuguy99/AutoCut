@@ -326,6 +326,25 @@ def test_job_accepts_crop_focus(config: Config):
     assert response.json()["options"]["crop_focus"] == "right"
 
 
+def test_job_accepts_preset(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"preset": "shorts"},
+    })
+    assert response.status_code == 200
+    assert response.json()["options"]["preset"] == "shorts"
+
+
+def test_job_rejects_unknown_preset(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"preset": "vlog"},
+    })
+    assert response.status_code == 422
+
+
 def test_job_accepts_manual_ranges(config: Config):
     client = _client(config)
     response = client.post("/api/jobs", json={

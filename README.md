@@ -16,8 +16,10 @@
    кадрирование и цветокоррекцию; кроп можно сместить влево или вправо;
 5. умеет резать точно заданные вручную диапазоны (`--range 12-42`) без
    автоанализа, если нужные моменты уже известны;
-6. нормализует громкость до −14 LUFS и проверяет текстовую похожесть клипов;
-7. сохраняет клипы, `diversity.json` и черновики подписей `publish.json` по
+6. поддерживает готовые пресеты: `podcast`, `talking_head`, `cinematic`,
+   `shorts`;
+7. нормализует громкость до −14 LUFS и проверяет текстовую похожесть клипов;
+8. сохраняет клипы, `diversity.json` и черновики подписей `publish.json` по
    папкам на каждое исходное видео.
 
 Вариативность не заменяет содержательную переработку чужого видео и не
@@ -103,6 +105,8 @@ HTTP API (jobs, SSE, плейлисты, отдача файлов) описан
 .venv/bin/autocut run ./video.mp4 --clips 3 --format crop
 .venv/bin/autocut run ./video.mp4 --format crop --crop-focus left
 .venv/bin/autocut run ./video.mp4 --range 12-42 --range 1:05-1:40
+.venv/bin/autocut run ./video.mp4 --preset shorts
+.venv/bin/autocut run ./video.mp4 --preset talking_head --crop-focus left
 .venv/bin/autocut run ./video.mp4 --variation strong --watermark "@nick"
 .venv/bin/autocut run ./video.mp4 --style karaoke --caption-mode word
 .venv/bin/autocut run ./video.mp4 --no-subtitles

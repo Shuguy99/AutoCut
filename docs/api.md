@@ -109,6 +109,7 @@ ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<wor
   "source": "https://rutube.ru/video/.../",
   "options": {
     "clips": 5,
+    "preset": "custom",
     "min_duration": 20,
     "max_duration": 60,
     "target_duration": 30,
@@ -134,6 +135,7 @@ ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<wor
 
 | Поле | Тип | По умолчанию | Смысл |
 |---|---|---|---|
+| `preset` | `custom`/`podcast`/`talking_head`/`cinematic`/`shorts` | `custom` | готовый набор оформления |
 | `layout` | `blur`/`crop` | `blur` | фон или кроп 9:16 |
 | `crop_focus` | `center`/`left`/`right` | `center` | смещение кропа |
 | `ranges` | `[[start,end], …]` \| null | `null` | ручные диапазоны; отключает автоанализ |
@@ -149,7 +151,9 @@ ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<wor
 Ошибка `422` — неизвестный стиль/режим, слишком длинный `watermark` или
 некорректный диапазон (`end <= start`, длина вне 1–300 с, больше 50 пар).
 Если `ranges` задан, поля `clips`, `min_duration`, `max_duration` и
-`target_duration` не влияют на нарезку.
+`target_duration` не влияют на нарезку. Если `preset` не `custom`, его
+значения переопределяют `layout`, `crop_focus`, `variation`, `style`,
+`caption_mode`, длительности, `hook`, `end_card`, `loudnorm` и `safe_zones`.
 Ошибка `429` — очередь заполнена.
 
 Ответ — объект задачи (см. ниже) со статусом `queued`.

@@ -83,6 +83,9 @@ class JobOptions(BaseModel):
     """Параметры одной задачи нарезки."""
 
     clips: int = Field(5, ge=1, le=50)
+    preset: Literal[
+        "custom", "podcast", "talking_head", "cinematic", "shorts"
+    ] = "custom"
     min_duration: float = Field(20, ge=1, le=120)
     max_duration: float = Field(60, ge=1, le=180)
     target_duration: float = Field(30, ge=1, le=120)

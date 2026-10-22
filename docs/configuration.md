@@ -46,6 +46,7 @@ autocut app --config ./config.yaml
 | Поле | Тип | По умолчанию | Диапазон | Смысл |
 |---|---|---|---|---|
 | `clips` | int | 5 | 1–50 | сколько клипов сделать |
+| `preset` | `custom`/`podcast`/`talking_head`/`cinematic`/`shorts` | `custom` | — | готовый набор оформления и длительностей |
 | `min_duration` | float | 20 | 1–120 | минимальная длина клипа, с |
 | `max_duration` | float | 60 | 1–180 | максимальная длина клипа, с |
 | `target_duration` | float | 30 | 1–120 | целевая длина; зажимается в min–max |
@@ -73,8 +74,9 @@ autocut app --config ./config.yaml
 ## CLI-флаги
 
 ```
---clips N          --min SECONDS      --max SECONDS
---target SECONDS   --format blur|crop --crop-focus FOCUS
+--clips N          --preset NAME      --min SECONDS
+--max SECONDS      --target SECONDS   --format blur|crop
+--crop-focus FOCUS
 --range START-END  --no-subtitles     --variation MODE
 --style STYLE
 --caption-mode MODE --watermark TEXT  --no-hook
@@ -84,6 +86,10 @@ autocut app --config ./config.yaml
 --keep-work        --ascii-slug       --json
 ```
 
+`--preset`: `custom`, `podcast`, `talking_head`, `cinematic`, `shorts`.
+Пресет задаёт формат кадра, стиль, режим текста, вариативность, хук, плашку,
+loudnorm, safe zones и длительности; водяной знак, ручные диапазоны, прокси и
+модель сохраняются. `--preset custom` (по умолчанию) ничего не меняет.
 `--crop-focus`: `center`, `left`, `right` (по умолчанию `center`); работает
 для `--format crop`.
 `--range`: ручной диапазон `START-END` или `1:05-1:40`; можно повторять.

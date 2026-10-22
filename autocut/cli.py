@@ -72,6 +72,12 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--clips", type=int, default=5, help="сколько клипов сделать"
     )
+    parser.add_argument(
+        "--preset",
+        choices=["custom", "podcast", "talking_head", "cinematic", "shorts"],
+        default="custom",
+        help="готовый пресет оформления и длительности",
+    )
     parser.add_argument("--min", dest="min_duration", type=float, default=20)
     parser.add_argument("--max", dest="max_duration", type=float, default=60)
     parser.add_argument(
@@ -193,6 +199,7 @@ def options_from_args(args: argparse.Namespace) -> JobOptions:
     """Превращает аргументы argparse в валидированные `JobOptions`."""
     return JobOptions(
         clips=args.clips,
+        preset=args.preset,
         min_duration=args.min_duration,
         max_duration=args.max_duration,
         target_duration=args.target_duration,
