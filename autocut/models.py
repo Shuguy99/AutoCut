@@ -87,6 +87,7 @@ class JobOptions(BaseModel):
     max_duration: float = Field(60, ge=1, le=180)
     target_duration: float = Field(30, ge=1, le=120)
     layout: Literal["blur", "crop"] = "blur"
+    crop_focus: Literal["center", "left", "right"] = "center"
     subtitles: bool = True
     variation: Literal["off", "subtle", "strong"] = "subtle"
     style: Literal["auto", "clean", "bold", "karaoke", "minimal"] = "auto"

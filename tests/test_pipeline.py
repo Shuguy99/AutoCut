@@ -7,7 +7,7 @@ import pytest
 
 from autocut.config import Config
 from autocut.models import JobOptions, Segment, Transcript, Word
-from autocut.pipeline import CancelledError, run_pipeline
+from autocut.pipeline import CancelledError, _focus_pan, run_pipeline
 
 
 @pytest.fixture
@@ -178,3 +178,11 @@ def test_pipeline_writes_variants_publish_and_diversity(
     assert "Watermark" in ass
     assert "Hook" in ass
     assert "EndCard" in ass
+
+
+def test_focus_pan_bias():
+    assert _focus_pan(0.0, "center") == 0.0
+    assert _focus_pan(0.0, "left") == -0.75
+    assert _focus_pan(0.0, "right") == 0.75
+    assert _focus_pan(0.5, "right") == 1.0
+    assert _focus_pan(-0.5, "left") == -1.0

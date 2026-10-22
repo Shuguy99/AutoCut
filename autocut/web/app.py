@@ -4,21 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from ..config import Config, load_config
-from ..downloader import DownloadError, NotAPlaylistError, list_playlist
+from ..downloader import (
+    MEDIA_SUFFIXES,
+    DownloadError,
+    NotAPlaylistError,
+    list_playlist,
+)
 from ..feed import FeedError, fetch_feed
 from ..jobs import Job, JobManager, QueueFullError
 from ..models import JobOptions
+from ..storage import slugify
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -29,6 +36,7 @@ TEXT_MEDIA_TYPES = {
 }
 
 MAX_BATCH = 20
+MAX_UPLOAD_BYTES = 4 * 1024**3
 
 
 def _clean_source(value: str) -> str:
@@ -163,6 +171,44 @@ def create_app(
             "title": info.title,
             "items": [asdict(item) for item in info.items],
             "truncated": info.truncated,
+        }
+
+    @app.post("/api/upload")
+    async def upload_video(file: UploadFile = File(...)) -> dict:
+        """Принимает локальный видеофайл в work/uploads и возвращает путь."""
+        name = Path(file.filename or "video.mp4").name
+        suffix = Path(name).suffix.lower()
+        if suffix not in MEDIA_SUFFIXES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"неподдерживаемый формат: {suffix or 'без расширения'}",
+            )
+        upload_dir = Path(config.work_dir).expanduser() / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        stem = slugify(Path(name).stem, max_len=40) or "video"
+        target = upload_dir / f"{uuid.uuid4().hex[:12]}_{stem}{suffix}"
+        size = 0
+        try:
+            with target.open("wb") as output:
+                while chunk := await file.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > MAX_UPLOAD_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="файл больше 4 ГБ",
+                        )
+                    output.write(chunk)
+            if size == 0:
+                raise HTTPException(status_code=400, detail="пустой файл")
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
+        finally:
+            await file.close()
+        return {
+            "path": str(target.resolve()),
+            "name": name,
+            "size": size,
         }
 
     @app.post("/api/jobs")

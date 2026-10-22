@@ -93,6 +93,43 @@ def _window_energy(rms: np.ndarray, start: float, end: float, duration: float) -
     return float(window.mean()) if window.size else 0.0
 
 
+def _align_to_words(
+    words: list[Word],
+    start: float,
+    end: float,
+    min_duration: float,
+    max_duration: float,
+) -> tuple[float, float]:
+    """Притягивает границы клипа к началу/концу слов, чтобы не резать речь."""
+    if not words:
+        return start, end
+    original = (start, end)
+    near_starts = [w.start for w in words if abs(w.start - start) <= 0.75]
+    if near_starts:
+        start = min(near_starts, key=lambda value: abs(value - start))
+    near_ends = [w.end for w in words if abs(w.end - end) <= 0.75]
+    if near_ends:
+        end = min(near_ends, key=lambda value: abs(value - end))
+
+    if end - start < min_duration:
+        candidates = [
+            w.end for w in words
+            if start + min_duration - 0.05 <= w.end <= start + max_duration
+        ]
+        if candidates:
+            end = min(candidates)
+    if end - start > max_duration:
+        candidates = [
+            w.end for w in words
+            if start + min_duration <= w.end <= start + max_duration
+        ]
+        if candidates:
+            end = max(candidates)
+    if end - start < 1.0:
+        return original
+    return start, end
+
+
 def find_highlights(
     duration: float,
     rms: np.ndarray,
@@ -137,6 +174,11 @@ def find_highlights(
         if end > duration:
             end = duration
             start = max(0.0, end - target)
+        start, end = _align_to_words(
+            words, start, end, min_duration, max_duration
+        )
+        if end > duration:
+            end = duration
         if end - start < 1.0:
             continue
         key = (round(start, 2), round(end, 2))

@@ -50,6 +50,7 @@ autocut app --config ./config.yaml
 | `max_duration` | float | 60 | 1–180 | максимальная длина клипа, с |
 | `target_duration` | float | 30 | 1–120 | целевая длина; зажимается в min–max |
 | `layout` | `blur`/`crop` | `blur` | — | фон или центральный кроп |
+| `crop_focus` | `center`/`left`/`right` | `center` | — | куда сместить кроп 9:16 |
 | `subtitles` | bool | `true` | — | вжигать ли ASS |
 | `variation` | `off`/`subtle`/`strong` | `subtle` | — | различия стиля и кадрирования |
 | `style` | `auto`/`clean`/`bold`/`karaoke`/`minimal` | `auto` | — | стиль субтитров |
@@ -72,15 +73,17 @@ autocut app --config ./config.yaml
 
 ```
 --clips N          --min SECONDS      --max SECONDS
---target SECONDS   --format blur|crop --no-subtitles
---variation MODE   --style STYLE      --caption-mode MODE
---watermark TEXT   --no-hook          --no-end-card
---no-loudnorm      --no-safe-zones
+--target SECONDS   --format blur|crop --crop-focus FOCUS
+--no-subtitles     --variation MODE   --style STYLE
+--caption-mode MODE --watermark TEXT  --no-hook
+--no-end-card      --no-loudnorm      --no-safe-zones
 --model NAME       --language LANG    --proxy URL
 --cookies FILE     --output DIR       --config FILE
 --keep-work        --ascii-slug       --json
 ```
 
+`--crop-focus`: `center`, `left`, `right` (по умолчанию `center`); работает
+для `--format crop`.
 `--variation`: `off`, `subtle`, `strong` (по умолчанию `subtle`).
 `--style`: `auto`, `clean`, `bold`, `karaoke`, `minimal` (по умолчанию `auto`).
 `--caption-mode`: `phrase` или `word` (по умолчанию `phrase`).
@@ -93,6 +96,11 @@ autocut app --config ./config.yaml
 
 `--playlist-limit > 1` включает последовательную обработку плейлиста; для
 локального файла флаг игнорируется.
+
+В веб-интерфейсе видео можно перетащить в область загрузки: файл попадёт в
+`<work_dir>/uploads/`, а в поле источника подставится его путь. Это удобно,
+когда ссылка недоступна или видео уже скачано. Ограничение — 4 ГиБ и
+медиаформаты, которые понимает ffmpeg.
 
 ## Переменные, влияющие на Whisper/Hugging Face
 

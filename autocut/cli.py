@@ -37,6 +37,10 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
         "--format", dest="layout", choices=["blur", "crop"], default="blur"
     )
     parser.add_argument(
+        "--crop-focus", choices=["center", "left", "right"], default="center",
+        help="куда смещать кадр при кропе: центр, левее или правее",
+    )
+    parser.add_argument(
         "--model", default=None,
         help="модель Whisper (tiny/base/small/medium)",
     )
@@ -144,6 +148,7 @@ def options_from_args(args: argparse.Namespace) -> JobOptions:
         max_duration=args.max_duration,
         target_duration=args.target_duration,
         layout=args.layout,
+        crop_focus=args.crop_focus,
         subtitles=args.subtitles,
         variation=args.variation,
         style=args.style,

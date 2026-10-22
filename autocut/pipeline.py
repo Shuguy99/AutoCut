@@ -34,6 +34,13 @@ ProgressFn = Callable[[str, float, str], None]
 
 logger = logging.getLogger(__name__)
 
+_FOCUS_PAN = {"center": 0.0, "left": -0.75, "right": 0.75}
+
+
+def _focus_pan(pan_x: float, focus: str) -> float:
+    """Смещает кадр в выбранную пользователем сторону."""
+    return max(-1.0, min(1.0, pan_x + _FOCUS_PAN.get(focus, 0.0)))
+
 
 def _preview_time(cues: list[Cue], start: float, end: float) -> float:
     """Момент для превью: середина реплики, ближайшей к центру клипа.
@@ -266,7 +273,14 @@ def run_pipeline(
                     info.source_path, candidate.start, candidate.end,
                     ass_path, out_path, layout=options.layout,
                     zoom=variant.zoom,
-                    pan=(variant.pan_x, variant.pan_y),
+                    pan=(
+                        _focus_pan(
+                            variant.pan_x,
+                            options.crop_focus
+                            if options.layout == "crop" else "center",
+                        ),
+                        variant.pan_y,
+                    ),
                     grade=variant.grade,
                     loudnorm=options.loudnorm,
                 )

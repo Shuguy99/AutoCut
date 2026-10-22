@@ -85,6 +85,21 @@ HTML-интерфейс.
 Ошибки: `400` — это не плейлист, `422` — пустой `url`/неверный `limit`,
 `502` — сеть или yt-dlp.
 
+### `POST /api/upload`
+
+Загрузить локальное видео из веб-интерфейса (drag&drop или выбор файла).
+
+`multipart/form-data`, поле `file`. Допустимы медиаформаты, которые понимает
+ffmpeg; размер — до 4 ГиБ. Файл сохраняется в `<work_dir>/uploads/` с коротким
+случайным префиксом.
+
+```json
+{"path": "/abs/work/uploads/8f3a1c0b2d4e_video.mp4", "name": "video.mp4", "size": 12345678}
+```
+
+Ошибки: `400` — пустой файл или неизвестное расширение, `413` — файл больше
+4 ГиБ. Полученный `path` можно передать в `POST /api/jobs` как `source`.
+
 ### `POST /api/jobs`
 
 Создать одну задачу.
@@ -98,6 +113,7 @@ HTML-интерфейс.
     "max_duration": 60,
     "target_duration": 30,
     "layout": "blur",
+    "crop_focus": "center",
     "subtitles": true,
     "variation": "subtle",
     "style": "auto",
@@ -117,6 +133,8 @@ HTML-интерфейс.
 
 | Поле | Тип | По умолчанию | Смысл |
 |---|---|---|---|
+| `layout` | `blur`/`crop` | `blur` | фон или кроп 9:16 |
+| `crop_focus` | `center`/`left`/`right` | `center` | смещение кропа |
 | `variation` | `off`/`subtle`/`strong` | `subtle` | сила различий между клипами |
 | `style` | `auto`/`clean`/`bold`/`karaoke`/`minimal` | `auto` | стиль субтитров |
 | `caption_mode` | `phrase`/`word` | `phrase` | фразы или подсветка слов |

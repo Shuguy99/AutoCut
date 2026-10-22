@@ -30,6 +30,14 @@ def test_extract_hook_returns_none_for_empty_text():
     assert extract_hook("ну и а") is None
 
 
+def test_extract_hook_prefers_strong_question():
+    hook = extract_hook(
+        "И вот мы пошли. Почему это важно? Потому что детали решают всё."
+    )
+    assert hook is not None
+    assert "Почему это важно?" in hook
+
+
 def test_build_variants_is_deterministic_and_varied():
     options = _options(variation="strong", style="auto", watermark="@nick")
     texts = ["Первая фраза про деньги.", "Вторая фраза про спорт."]

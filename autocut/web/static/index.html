@@ -36,6 +36,13 @@
                  placeholder="https://youtu.be/..., https://rutube.ru/video/... или /home/user/video.mp4">
         </label>
 
+        <div id="drop-zone" class="drop-zone">
+          <input id="file-input" type="file" accept="video/*" hidden>
+          <button type="button" id="file-pick" class="ghost">Выбрать файл</button>
+          <span>или перетащите видео сюда</span>
+          <span id="upload-status"></span>
+        </div>
+
         <div class="row">
           <label class="field small">
             <span>Клипов</span>
@@ -53,7 +60,15 @@
             <span>Формат кадра</span>
             <select id="layout">
               <option value="blur">Размытый фон</option>
-              <option value="crop">Кроп по центру</option>
+              <option value="crop">Кроп 9:16</option>
+            </select>
+          </label>
+          <label class="field small">
+            <span>Фокус кропа</span>
+            <select id="crop-focus">
+              <option value="center" selected>Центр</option>
+              <option value="left">Левее</option>
+              <option value="right">Правее</option>
             </select>
           </label>
           <label class="field small toggle">

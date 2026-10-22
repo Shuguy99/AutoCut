@@ -45,11 +45,21 @@ def test_uniqueness_defaults():
     assert options.variation == "subtle"
     assert options.style == "auto"
     assert options.caption_mode == "phrase"
+    assert options.crop_focus == "center"
     assert options.hook is True
     assert options.end_card is True
     assert options.loudnorm is True
     assert options.safe_zones is True
     assert options.watermark is None
+
+
+def test_crop_focus_flag():
+    args = build_parser().parse_args([
+        "run", "video.mp4", "--format", "crop", "--crop-focus", "left",
+    ])
+    options = options_from_args(args)
+    assert options.layout == "crop"
+    assert options.crop_focus == "left"
 
 
 def test_uniqueness_flags():

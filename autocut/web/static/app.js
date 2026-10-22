@@ -108,6 +108,7 @@ function currentOptions() {
     min_duration: Number(document.getElementById("min-duration").value),
     max_duration: Number(document.getElementById("max-duration").value),
     layout: document.getElementById("layout").value,
+    crop_focus: document.getElementById("crop-focus").value,
     subtitles: document.getElementById("subtitles").checked,
     variation: document.getElementById("variation").value,
     style: document.getElementById("style").value,
@@ -371,6 +372,26 @@ function clipNode(clip) {
   const links = document.createElement("div");
   links.className = "clip-links";
   if (clip.file_url) {
+    const watch = document.createElement("button");
+    watch.type = "button";
+    watch.className = "ghost";
+    watch.textContent = "смотреть";
+    watch.addEventListener("click", () => {
+      if (item.querySelector("video.clip-video")) return;
+      const video = document.createElement("video");
+      video.className = "clip-video";
+      video.controls = true;
+      video.playsInline = true;
+      video.preload = "metadata";
+      video.src = clip.file_url;
+      if (clip.preview_url) video.poster = clip.preview_url;
+      const image = item.querySelector("img");
+      if (image) image.replaceWith(video);
+      else item.prepend(video);
+      video.play().catch(() => {});
+    });
+    links.append(watch);
+
     const download = document.createElement("a");
     download.href = clip.file_url;
     download.download = "";
@@ -452,6 +473,55 @@ function startPolling() {
   };
   pollTimer = setTimeout(tick, 0);
 }
+
+async function uploadVideo(file) {
+  const status = document.getElementById("upload-status");
+  if (!file) return;
+  status.textContent = `Загрузка ${file.name}…`;
+  const data = new FormData();
+  data.append("file", file);
+  try {
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      body: data,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || `HTTP ${response.status}`);
+    }
+    const uploaded = await response.json();
+    setMode("video");
+    document.getElementById("source").value = uploaded.path;
+    status.textContent = `Загружено: ${uploaded.name}`;
+  } catch (err) {
+    status.textContent = `Ошибка загрузки: ${err.message}`;
+  }
+}
+
+const dropZone = document.getElementById("drop-zone");
+const fileInput = document.getElementById("file-input");
+document.getElementById("file-pick").addEventListener("click", () => {
+  fileInput.click();
+});
+fileInput.addEventListener("change", () => {
+  uploadVideo(fileInput.files[0]);
+  fileInput.value = "";
+});
+["dragenter", "dragover"].forEach((eventName) => {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+});
+["dragleave", "drop"].forEach((eventName) => {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("dragover");
+  });
+});
+dropZone.addEventListener("drop", (event) => {
+  uploadVideo(event.dataTransfer.files[0]);
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

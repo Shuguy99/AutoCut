@@ -1,5 +1,6 @@
 import threading
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -280,6 +281,49 @@ def test_job_accepts_uniqueness_options(config: Config):
     assert options["end_card"] is False
     assert options["loudnorm"] is False
     assert options["safe_zones"] is False
+
+
+def test_upload_video(config: Config):
+    client = _client(config)
+    response = client.post(
+        "/api/upload",
+        files={"file": ("Мой клип.mp4", b"fake-video-bytes", "video/mp4")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    path = Path(data["path"])
+    assert path.exists()
+    assert path.read_bytes() == b"fake-video-bytes"
+    assert path.parent == Path(config.work_dir).resolve() / "uploads"
+    assert data["name"] == "Мой клип.mp4"
+
+
+def test_upload_rejects_unknown_extension(config: Config):
+    client = _client(config)
+    response = client.post(
+        "/api/upload",
+        files={"file": ("notes.txt", b"text", "text/plain")},
+    )
+    assert response.status_code == 400
+
+
+def test_upload_rejects_empty_file(config: Config):
+    client = _client(config)
+    response = client.post(
+        "/api/upload",
+        files={"file": ("empty.mp4", b"", "video/mp4")},
+    )
+    assert response.status_code == 400
+
+
+def test_job_accepts_crop_focus(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"crop_focus": "right"},
+    })
+    assert response.status_code == 200
+    assert response.json()["options"]["crop_focus"] == "right"
 
 
 def test_job_rejects_unknown_style(config: Config):

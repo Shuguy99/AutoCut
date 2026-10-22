@@ -34,7 +34,7 @@ def test_highlights_find_loud_region():
     )
     assert len(clips) == 2
     assert clips[0].start <= 55
-    assert clips[0].end >= 75
+    assert clips[0].end >= 74.9
     assert all(20 <= c.end - c.start <= 40 for c in clips)
     assert clips[0].score > clips[1].score
 
@@ -94,6 +94,24 @@ def test_max_text_overlap_ignores_empty_transcript():
         max_text_overlap=0.6,
     )
     assert len(clips) == 3
+
+
+def test_highlights_align_to_word_edges():
+    duration = 60.0
+    words = [
+        Word(t, t + 0.4, "слово")
+        for t in np.arange(0, duration, 0.5)
+    ]
+    clips = find_highlights(
+        duration, np.ones(120), words, [], count=2,
+        min_duration=10, max_duration=25, target_duration=20,
+    )
+    starts = {round(word.start, 2) for word in words}
+    ends = {round(word.end, 2) for word in words}
+    assert clips
+    for clip in clips:
+        assert round(clip.start, 2) in starts or clip.start == 0
+        assert round(clip.end, 2) in ends or clip.end == duration
 
 
 def test_max_text_overlap_keeps_different_windows():

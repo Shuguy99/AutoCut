@@ -13,6 +13,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from .models import JobOptions
+from .scoring import HOOK_WORDS
 
 STYLE_NAMES = ("clean", "bold", "karaoke", "minimal")
 
@@ -116,21 +117,56 @@ def _pick_style(
 def extract_hook(
     text: str, max_words: int = 8, max_chars: int = 48
 ) -> str | None:
-    """Берёт короткую фразу из начала клипа для верхней плашки."""
+    """Берёт самую сильную короткую фразу из первых предложений клипа."""
     text = re.sub(r"\s+", " ", text or "").strip()
     if not text:
         return None
-    sentences = re.split(r"(?<=[.!?…])\s+", text)
-    hook = sentences[0].strip()
-    if len(hook) < 12 and len(sentences) > 1:
-        hook = f"{hook} {sentences[1]}".strip()
-
-    words = hook.split()
-    while words and _normalize_word(words[0]) in _FILLERS:
-        words.pop(0)
-    if len(words) < 2:
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?…])\s+", text)
+        if sentence.strip()
+    ]
+    if not sentences:
         return None
 
+    candidates = sentences[:3]
+    if len(candidates) > 1 and len(candidates[0]) < 12:
+        candidates[0] = f"{candidates[0]} {candidates[1]}".strip()
+
+    def score(sentence: str) -> float:
+        words = sentence.split()
+        if not words:
+            return -100.0
+        value = 0.0
+        if sentence.rstrip().endswith("?"):
+            value += 2.5
+        if "!" in sentence:
+            value += 1.5
+        if any(char.isdigit() for char in sentence):
+            value += 1.0
+        hits = sum(
+            1 for word in words
+            if _normalize_word(word) in HOOK_WORDS
+        )
+        value += min(4, hits) * 1.5
+        if 3 <= len(words) <= 10:
+            value += 1.0
+        elif len(words) > 14:
+            value -= 1.0
+        return value
+
+    hook = ""
+    for candidate in sorted(candidates, key=score, reverse=True):
+        words = candidate.split()
+        while words and _normalize_word(words[0]) in _FILLERS:
+            words.pop(0)
+        if len(words) >= 2:
+            hook = " ".join(words)
+            break
+    if not hook:
+        return None
+
+    words = hook.split()
     truncated = False
     if len(words) > max_words:
         words = words[:max_words]
