@@ -1,3 +1,5 @@
+"""Работа с ffmpeg/ffprobe: метаданные, аудио, сцены, превью."""
+
 from __future__ import annotations
 
 import json
@@ -108,6 +110,7 @@ def _run_bytes(cmd: list[str]) -> bytes:
 
 
 def probe(path: Path | str) -> MediaInfo:
+    """Читает длительность, размеры, fps и наличие аудио через ffprobe."""
     output = _run_text(
         [
             FFPROBE, "-v", "error", "-print_format", "json",
@@ -141,6 +144,7 @@ def probe(path: Path | str) -> MediaInfo:
 
 
 def extract_audio(video: Path | str, out_wav: Path) -> Path:
+    """Извлекает моно 16 кГц PCM WAV для Whisper."""
     out_wav = Path(out_wav)
     out_wav.parent.mkdir(parents=True, exist_ok=True)
     _run_text(
@@ -154,6 +158,7 @@ def extract_audio(video: Path | str, out_wav: Path) -> Path:
 
 
 def compute_rms_windows(audio: Path | str, window: float = 0.5) -> np.ndarray:
+    """Считает RMS по окнам ``window`` секунд (16 кГц, моно)."""
     raw = _run_bytes(
         [
             FFMPEG, "-v", "error", "-i", str(audio),
@@ -172,6 +177,7 @@ def compute_rms_windows(audio: Path | str, window: float = 0.5) -> np.ndarray:
 
 
 def detect_scenes(video: Path | str, threshold: float = 0.35) -> list[float]:
+    """Возвращает временные точки смены сцены (может быть пустым)."""
     proc = subprocess.run(
         [
             FFMPEG, "-v", "info", "-i", str(video),
@@ -180,6 +186,10 @@ def detect_scenes(video: Path | str, threshold: float = 0.35) -> list[float]:
         ],
         capture_output=True, text=True,
     )
+    if proc.returncode != 0:
+        raise MediaError(
+            f"не удалось определить сцены: {proc.stderr[-2000:]}"
+        )
     return sorted(
         {round(float(m.group(1)), 3)
          for m in re.finditer(r"pts_time:([0-9.]+)", proc.stderr)}
@@ -189,6 +199,7 @@ def detect_scenes(video: Path | str, threshold: float = 0.35) -> list[float]:
 def make_preview(
     video: Path | str, out_path: Path, at: float | None = None
 ) -> Path:
+    """Сохраняет один кадр; по умолчанию — середина видео."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if at is None:

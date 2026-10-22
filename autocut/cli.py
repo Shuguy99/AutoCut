@@ -1,9 +1,13 @@
+"""Командная строка AutoCut: run, trending, web, app."""
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from .config import load_config
 from .downloader import (
@@ -41,6 +45,10 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cookies", default=None)
     parser.add_argument("--output", default=None, help="папка результатов")
     parser.add_argument("--config", default=None, help="путь к config.yaml")
+    parser.add_argument(
+        "--no-subtitles", dest="subtitles", action="store_false",
+        help="не вжигать субтитры в клипы",
+    )
     parser.add_argument("--keep-work", action="store_true")
     parser.add_argument("--ascii-slug", action="store_true")
     parser.add_argument(
@@ -49,6 +57,7 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Создаёт парсер команд run/trending/web/app."""
     parser = argparse.ArgumentParser(
         prog="autocut",
         description="Ссылка (YouTube, RuTube, …) или файл → вертикальные клипы",
@@ -77,21 +86,48 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--port", type=int, default=8000)
     web.add_argument("--config", default=None)
     web.add_argument("--output", default=None)
+
+    app = sub.add_parser(
+        "app", help="открыть веб-интерфейс в отдельном окне приложения"
+    )
+    app.add_argument("--host", default="127.0.0.1")
+    app.add_argument(
+        "--port", type=int, default=0,
+        help="0 — выбрать свободный порт автоматически",
+    )
+    app.add_argument("--config", default=None)
+    app.add_argument("--output", default=None)
+    app.add_argument(
+        "--browser", choices=["auto", "chrome", "firefox", "default"],
+        default="auto", help="чем открыть окно приложения",
+    )
     return parser
 
 
 def options_from_args(args: argparse.Namespace) -> JobOptions:
+    """Превращает аргументы argparse в валидированные `JobOptions`."""
     return JobOptions(
         clips=args.clips,
         min_duration=args.min_duration,
         max_duration=args.max_duration,
         target_duration=args.target_duration,
         layout=args.layout,
+        subtitles=args.subtitles,
         proxy=args.proxy,
         cookies=args.cookies,
         model=args.model,
         language=args.language,
     )
+
+
+def _validation_message(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        parts = []
+        for error in exc.errors():
+            location = ".".join(str(item) for item in error.get("loc", ()))
+            parts.append(f"{location}: {error.get('msg', '')}".strip(": "))
+        return "; ".join(parts) or str(exc)
+    return str(exc)
 
 
 def _config_from_args(args: argparse.Namespace):
@@ -136,6 +172,7 @@ def _run_playlist(args, options, config, progress) -> int:
         return 1
 
     failures = 0
+    results = []
     for item in playlist.items:
         print(f"\n=== {item.title} ===", file=sys.stderr)
         try:
@@ -146,7 +183,12 @@ def _run_playlist(args, options, config, progress) -> int:
             failures += 1
             print(f"Ошибка: {exc}", file=sys.stderr)
             continue
-        _print_result(result, args.json)
+        results.append(result)
+        if not args.json:
+            _print_result(result, False)
+
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
 
     done = len(playlist.items) - failures
     print(
@@ -168,12 +210,29 @@ def main(argv: list[str] | None = None) -> int:
 
         from .web.app import create_app
 
-        config = _config_from_args(args)
+        try:
+            config = _config_from_args(args)
+        except ValueError as exc:
+            parser.error(_validation_message(exc))
         uvicorn.run(create_app(config), host=args.host, port=args.port)
         return 0
 
-    config = _config_from_args(args)
-    options = options_from_args(args)
+    if args.command == "app":
+        from .desktop import run_desktop_app
+
+        try:
+            config = _config_from_args(args)
+        except ValueError as exc:
+            parser.error(_validation_message(exc))
+        return run_desktop_app(
+            config, host=args.host, port=args.port, browser=args.browser
+        )
+
+    try:
+        config = _config_from_args(args)
+        options = options_from_args(args)
+    except (ValidationError, ValueError) as exc:
+        parser.error(_validation_message(exc))
 
     def progress(stage: str, percent: float, message: str) -> None:
         print(f"[{stage}] {percent:5.1f}% {message}", file=sys.stderr)
@@ -203,3 +262,8 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     _print_result(result, args.json)
     return 0
+
+
+def main_app(argv: list[str] | None = None) -> int:
+    """Точка входа ``autocut-app``: сразу открывает настольное окно."""
+    return main(["app", *(sys.argv[1:] if argv is None else argv)])

@@ -93,3 +93,40 @@ def test_submit_many_queue_full_adds_nothing(config: Config):
 
     gate.set()
     manager.shutdown()
+
+
+def test_submit_many_requires_sources(config: Config):
+    manager = JobManager(config, runner=lambda *a, **k: {"clips": []})
+    with pytest.raises(ValueError):
+        manager.submit_many([], JobOptions(clips=1))
+    manager.shutdown()
+
+
+def test_cancel_queued_job_skips_runner(config: Config):
+    gate = threading.Event()
+    calls = []
+
+    def runner(source, *args, **kwargs):
+        calls.append(source)
+        gate.wait(3)
+        return {"clips": []}
+
+    manager = JobManager(config, runner=runner, max_queue=2)
+    first = manager.submit("/tmp/a.mp4", JobOptions(clips=1))
+    _wait(manager, first.id, status="running")
+    second = manager.submit("/tmp/b.mp4", JobOptions(clips=1))
+    assert manager.cancel(second.id) is True
+    assert manager.get(second.id).status == "cancelled"
+
+    gate.set()
+    _wait(manager, first.id)
+    _wait(manager, second.id, status="cancelled")
+    assert calls == ["/tmp/a.mp4"]
+    manager.shutdown()
+
+
+def test_submit_after_shutdown_is_rejected(config: Config):
+    manager = JobManager(config, runner=lambda *a, **k: {"clips": []})
+    manager.shutdown()
+    with pytest.raises(QueueFullError):
+        manager.submit("/tmp/a.mp4", JobOptions(clips=1))

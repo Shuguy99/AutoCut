@@ -74,6 +74,14 @@ def test_index(config: Config):
     assert "AutoCut" in response.text
 
 
+def test_health(config: Config):
+    client = _client(config)
+    for path in ("/health", "/api/health"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+
 def test_feed_endpoint(config: Config, monkeypatch):
     page = FeedPage(
         items=[{
@@ -237,4 +245,55 @@ def test_batch_jobs_queue_full(config: Config):
     assert response.status_code == 429
 
     gate.set()
+    manager.shutdown()
+
+
+def test_create_job_rejects_blank_source(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={"source": "   "})
+    assert response.status_code == 422
+
+
+def test_batch_drops_blank_sources(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs/batch", json={
+        "sources": ["  ", " /tmp/a.mp4 "],
+        "options": {"clips": 1},
+    })
+    assert response.status_code == 200
+    jobs = response.json()["jobs"]
+    assert [job["source"] for job in jobs] == ["/tmp/a.mp4"]
+
+
+def test_batch_rejects_only_blank_sources(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs/batch", json={
+        "sources": ["  ", "\t"],
+        "options": {"clips": 1},
+    })
+    assert response.status_code == 422
+
+
+def test_playlist_rejects_blank_url(config: Config):
+    client = _client(config)
+    response = client.post("/api/playlist", json={"url": "   "})
+    assert response.status_code == 422
+
+
+def test_feed_limit_bounds(config: Config):
+    client = _client(config)
+    assert client.get("/api/feed?limit=0").status_code == 422
+    assert client.get("/api/feed?limit=25").status_code == 422
+    assert client.get("/api/feed?offset=-1").status_code == 422
+
+
+def test_batch_accepts_twenty_after_cleaning(config: Config):
+    manager = JobManager(config, runner=_fake_runner, max_queue=20)
+    client = TestClient(create_app(config, manager))
+    response = client.post("/api/jobs/batch", json={
+        "sources": [" "] + [f"/tmp/{index}.mp4" for index in range(20)],
+        "options": {"clips": 1},
+    })
+    assert response.status_code == 200
+    assert len(response.json()["jobs"]) == 20
     manager.shutdown()

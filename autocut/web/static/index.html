@@ -19,7 +19,7 @@
         <button id="feed-refresh" class="ghost" type="button">Обновить</button>
       </div>
       <div id="feed" class="feed-grid"></div>
-      <div id="feed-state" class="feed-state"></div>
+      <div id="feed-state" class="feed-state" role="status" aria-live="polite"></div>
       <button id="feed-more" class="ghost hidden" type="button">Показать ещё</button>
     </section>
 
@@ -56,6 +56,10 @@
               <option value="crop">Кроп по центру</option>
             </select>
           </label>
+          <label class="field small toggle">
+            <span>Субтитры</span>
+            <input id="subtitles" type="checkbox" checked>
+          </label>
         </div>
 
         <label class="field">
@@ -64,7 +68,7 @@
         </label>
 
         <button id="submit" type="submit">Сделать клипы</button>
-        <p id="form-error" class="error hidden"></p>
+        <p id="form-error" class="error hidden" role="alert" aria-live="polite"></p>
 
         <div id="playlist-panel" class="playlist-panel hidden">
           <div class="playlist-head">

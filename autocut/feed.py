@@ -1,3 +1,9 @@
+"""Лента рекомендаций RuTube.
+
+Модуль не зависит от FastAPI и yt-dlp: запрашивает публичный JSON-endpoint,
+фильтрует удалённые/прямые эфиры и ролики вне диапазона 2–60 минут.
+"""
+
 from __future__ import annotations
 
 import json
@@ -20,6 +26,8 @@ class FeedError(RuntimeError):
 
 @dataclass
 class FeedPage:
+    """Одна страница ленты и курсор для следующего запроса."""
+
     items: list[dict]
     has_more: bool
     next_offset: int
@@ -29,6 +37,14 @@ def _fetch_json(url: str, timeout: float) -> dict:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.load(response)
+
+
+def _safe_int(value) -> int:
+    """Приводит счётчик просмотров к int, не роняя всю страницу."""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _to_item(raw: dict) -> dict | None:
@@ -49,7 +65,7 @@ def _to_item(raw: dict) -> dict | None:
         "title": raw.get("title") or "Без названия",
         "channel": author.get("name") or "unknown",
         "duration": duration,
-        "views": int(raw.get("hits") or 0),
+        "views": _safe_int(raw.get("hits")),
         "thumbnail": raw.get("thumbnail_url"),
         "url": raw.get("video_url") or f"https://rutube.ru/video/{video_id}/",
         "created_at": raw.get("created_ts"),
@@ -61,6 +77,12 @@ def _raw_limit(limit: int) -> int:
 
 
 def fetch_feed(offset: int = 0, limit: int = 12, timeout: float = TIMEOUT) -> FeedPage:
+    """Возвращает до ``limit`` подходящих роликов, начиная с ``offset``.
+
+    RuTube отдаёт вперемешку короткие, длинные и прямые эфиры, поэтому сырая
+    страница запрашивается с запасом (``limit * 4``) и фильтруется локально.
+    """
+    limit = max(1, int(limit))
     raw_limit = _raw_limit(limit)
     query = urllib.parse.urlencode({"limit": raw_limit, "offset": offset})
     try:

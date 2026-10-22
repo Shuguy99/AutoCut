@@ -10,6 +10,7 @@ ENV_VARS = [
     "AUTOCUT_OUTPUT", "AUTOCUT_WORKDIR", "AUTOCUT_MODEL",
     "AUTOCUT_PROXY", "AUTOCUT_COOKIES", "AUTOCUT_DEVICE",
     "AUTOCUT_COMPUTE_TYPE", "AUTOCUT_ASCII_SLUG", "AUTOCUT_KEEP_WORK",
+    "AUTOCUT_LANGUAGE", "AUTOCUT_MAX_HEIGHT",
 ]
 
 
@@ -39,6 +40,20 @@ def test_yaml_then_env_override(tmp_path: Path, monkeypatch):
 def test_bool_env(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AUTOCUT_KEEP_WORK", "true")
     assert load_config().keep_work is True
+
+
+def test_max_height_from_env(monkeypatch):
+    monkeypatch.setenv("AUTOCUT_MAX_HEIGHT", "720")
+    assert load_config().max_height == 720
+
+
+def test_max_height_rejects_invalid(monkeypatch):
+    monkeypatch.setenv("AUTOCUT_MAX_HEIGHT", "abc")
+    with pytest.raises(ValueError, match="целым"):
+        load_config()
+    monkeypatch.setenv("AUTOCUT_MAX_HEIGHT", "100")
+    with pytest.raises(ValueError, match="240"):
+        load_config()
 
 
 def test_job_options_clamp_target():

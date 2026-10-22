@@ -1,3 +1,5 @@
+"""Оценка фрагментов: энергия, речь, сцены, хуки и завершённость фраз."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -84,6 +86,7 @@ def find_highlights(
     target_duration: float = 30,
     step: float = 1.0,
 ) -> list[ClipCandidate]:
+    """Возвращает до ``count`` непересекающихся кандидатов по убыванию score."""
     duration = max(0.1, float(duration))
     if duration <= min_duration:
         return [ClipCandidate(0.0, duration, 1.0, {

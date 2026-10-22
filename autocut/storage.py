@@ -1,3 +1,5 @@
+"""Пути результатов, slug-и, JSON/SRT-файлы."""
+
 from __future__ import annotations
 
 import json
@@ -24,6 +26,7 @@ def _transliterate(value: str) -> str:
 
 
 def slugify(text: str, ascii_only: bool = False, max_len: int = 60) -> str:
+    """Делает безопасный для файловой системы slug (кириллица сохраняется)."""
     value = (text or "").strip()
     if ascii_only:
         value = _transliterate(value)
@@ -44,6 +47,7 @@ def create_result_dir(
     title: str,
     ascii_slug: bool = False,
 ) -> Path:
+    """Создаёт уникальную папку результата, не перезаписывая старые."""
     channel_slug = slugify(
         channel or "unknown", ascii_only=ascii_slug, max_len=40
     )
@@ -52,16 +56,22 @@ def create_result_dir(
         f"{slugify(title, ascii_only=ascii_slug)}"
     )
     base = Path(output_dir) / channel_slug
-    candidate = base / name
-    counter = 2
-    while candidate.exists():
-        candidate = base / f"{name}_{counter}"
-        counter += 1
-    (candidate / "clips").mkdir(parents=True)
-    return candidate
+    base.mkdir(parents=True, exist_ok=True)
+    counter = 1
+    while True:
+        suffix = "" if counter == 1 else f"_{counter}"
+        candidate = base / f"{name}{suffix}"
+        try:
+            candidate.mkdir(parents=True)
+        except FileExistsError:
+            counter += 1
+            continue
+        (candidate / "clips").mkdir()
+        return candidate
 
 
 def write_json(path: Path, data: dict) -> None:
+    """Пишет JSON с UTF-8 и отступами, создавая папки."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -69,14 +79,17 @@ def write_json(path: Path, data: dict) -> None:
 
 
 def read_json(path: Path) -> dict:
+    """Читает JSON-файл."""
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def save_transcript(path: Path, transcript: Transcript) -> None:
+    """Сохраняет транскрипт в JSON-кэш."""
     write_json(path, transcript.to_dict())
 
 
 def load_transcript(path: Path) -> Transcript:
+    """Загружает транскрипт из JSON-кэша."""
     return Transcript.from_dict(read_json(path))
 
 
@@ -110,6 +123,9 @@ def _srt_time(seconds: float) -> str:
 
 
 def write_srt(transcript: Transcript, path: Path) -> None:
+    """Пишет SRT-субтитры по словам транскрипта."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     lines = []
     for index, cue in enumerate(_word_cues(transcript.words), start=1):
         lines.append(str(index))

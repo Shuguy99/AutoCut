@@ -1,15 +1,18 @@
+"""FastAPI-приложение: REST API, SSE-прогресс и отдача результатов."""
+
 from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..config import Config, load_config
 from ..downloader import DownloadError, NotAPlaylistError, list_playlist
@@ -25,15 +28,39 @@ TEXT_MEDIA_TYPES = {
     ".srt": "text/plain; charset=utf-8",
 }
 
+MAX_BATCH = 20
+
+
+def _clean_source(value: str) -> str:
+    value = value.strip()
+    if not value:
+        raise ValueError("источник не может быть пустым")
+    return value
+
 
 class CreateJobRequest(BaseModel):
     source: str = Field(min_length=1)
     options: JobOptions = Field(default_factory=JobOptions)
 
+    @field_validator("source")
+    @classmethod
+    def _validate_source(cls, value: str) -> str:
+        return _clean_source(value)
+
 
 class BatchJobRequest(BaseModel):
-    sources: list[str] = Field(min_length=1, max_length=20)
+    sources: list[str] = Field(min_length=1)
     options: JobOptions = Field(default_factory=JobOptions)
+
+    @field_validator("sources")
+    @classmethod
+    def _validate_sources(cls, values: list[str]) -> list[str]:
+        cleaned = [_clean_source(value) for value in values if value.strip()]
+        if not cleaned:
+            raise ValueError("нужен хотя бы один источник")
+        if len(cleaned) > MAX_BATCH:
+            raise ValueError(f"за один раз можно запустить не более {MAX_BATCH} видео")
+        return cleaned
 
 
 class PlaylistRequest(BaseModel):
@@ -41,8 +68,14 @@ class PlaylistRequest(BaseModel):
     limit: int = Field(30, ge=1, le=50)
     proxy: str | None = None
 
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, value: str) -> str:
+        return _clean_source(value)
+
 
 def _job_payload(job: Job, config: Config) -> dict:
+    """Добавляет к задаче URL файлов результата относительно output_dir."""
     data = job.to_dict()
     root = Path(config.output_dir).expanduser().resolve()
 
@@ -74,21 +107,34 @@ def _job_payload(job: Job, config: Config) -> dict:
 def create_app(
     config: Config | None = None, manager: JobManager | None = None
 ) -> FastAPI:
+    """Создаёт приложение; ``manager`` можно подменить в тестах."""
     config = config or load_config()
-    manager = manager or JobManager(config, max_queue=20)
-    app = FastAPI(title="AutoCut", version="0.1.0")
+    owns_manager = manager is None
+    manager = manager or JobManager(config, max_queue=MAX_BATCH)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        yield
+        if owns_manager:
+            manager.shutdown()
+
+    app = FastAPI(title="AutoCut", version="0.1.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
+    @app.get("/health")
+    @app.get("/api/health")
+    def health() -> dict:
+        return {"status": "ok"}
+
     @app.get("/api/feed")
-    def get_feed(offset: int = 0, limit: int = 12) -> dict:
-        if not (1 <= limit <= 24) or offset < 0:
-            raise HTTPException(
-                status_code=422, detail="limit должен быть 1–24, offset ≥ 0"
-            )
+    def get_feed(
+        offset: int = Query(0, ge=0),
+        limit: int = Query(12, ge=1, le=24),
+    ) -> dict:
         try:
             page = fetch_feed(offset=offset, limit=limit)
         except FeedError as exc:
@@ -103,7 +149,7 @@ def create_app(
     def playlist(request: PlaylistRequest) -> dict:
         try:
             info = list_playlist(
-                request.url.strip(),
+                request.url,
                 limit=request.limit,
                 proxy=request.proxy or config.proxy,
                 cookies=str(config.cookies) if config.cookies else None,
@@ -121,24 +167,15 @@ def create_app(
     @app.post("/api/jobs")
     def create_job(request: CreateJobRequest) -> dict:
         try:
-            job = manager.submit(request.source.strip(), request.options)
+            job = manager.submit(request.source, request.options)
         except QueueFullError as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         return _job_payload(job, config)
 
     @app.post("/api/jobs/batch")
     def create_jobs(request: BatchJobRequest) -> dict:
-        sources = [
-            source.strip()
-            for source in request.sources
-            if source.strip()
-        ]
-        if not sources:
-            raise HTTPException(
-                status_code=422, detail="нужен хотя бы один источник"
-            )
         try:
-            jobs = manager.submit_many(sources, request.options)
+            jobs = manager.submit_many(request.sources, request.options)
         except QueueFullError as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         return {"jobs": [_job_payload(job, config) for job in jobs]}
@@ -166,6 +203,7 @@ def create_app(
     def events(job_id: str) -> StreamingResponse:
         async def stream():
             last = None
+            ticks = 0
             while True:
                 job = manager.get(job_id)
                 if job is None:
@@ -179,6 +217,9 @@ def create_app(
                     last = payload
                 if job.status in {"done", "failed", "cancelled"}:
                     return
+                ticks += 1
+                if ticks % 25 == 0:
+                    yield ": ping\n\n"
                 await asyncio.sleep(0.4)
 
         return StreamingResponse(stream(), media_type="text/event-stream")

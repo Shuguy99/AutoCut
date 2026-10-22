@@ -1,3 +1,5 @@
+import pytest
+
 from autocut import cli
 from autocut.cli import build_parser, options_from_args
 from autocut.models import JobOptions, PlaylistInfo, PlaylistItem
@@ -28,6 +30,34 @@ def test_web_defaults():
     args = build_parser().parse_args(["web"])
     assert args.host == "127.0.0.1"
     assert args.port == 8000
+
+
+def test_no_subtitles_flag():
+    args = build_parser().parse_args(["run", "video.mp4", "--no-subtitles"])
+    assert args.subtitles is False
+    assert options_from_args(args).subtitles is False
+
+
+def test_app_defaults():
+    args = build_parser().parse_args(["app"])
+    assert args.host == "127.0.0.1"
+    assert args.port == 0
+    assert args.browser == "auto"
+
+
+def test_invalid_clips_are_reported_without_traceback(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["run", "video.mp4", "--clips", "0", "--output", str(tmp_path)])
+    assert exc.value.code == 2
+
+
+def test_invalid_duration_range_is_reported_without_traceback(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            "run", "video.mp4", "--min", "70", "--max", "30",
+            "--output", str(tmp_path),
+        ])
+    assert exc.value.code == 2
 
 
 def test_playlist_limit_default():

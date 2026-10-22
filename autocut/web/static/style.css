@@ -60,9 +60,23 @@ input, select, button {
 }
 
 input:focus, select:focus { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
 
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .field.small { flex: 1 1 140px; }
+
+.field.toggle { align-content: end; }
+.field.toggle input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 11px 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 button {
   background: linear-gradient(90deg, var(--accent), #a16bff);
@@ -94,6 +108,8 @@ button:disabled { opacity: .6; cursor: wait; }
 .clip-links { display: flex; gap: 12px; margin-top: 4px; }
 .clip-links a { color: var(--accent-2); text-decoration: none; }
 .clip-links a:hover { text-decoration: underline; }
+.clip-error { color: var(--danger); overflow-wrap: anywhere; }
+.feed-item.no-thumb { border-style: dashed; }
 
 .error { color: var(--danger); margin: 10px 0 0; }
 .hidden { display: none !important; }

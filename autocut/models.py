@@ -1,3 +1,5 @@
+"""Модели данных AutoCut: транскрипт, источники и параметры задачи."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -78,11 +80,14 @@ class PlaylistInfo:
 
 
 class JobOptions(BaseModel):
+    """Параметры одной задачи нарезки."""
+
     clips: int = Field(5, ge=1, le=50)
     min_duration: float = Field(20, ge=1, le=120)
     max_duration: float = Field(60, ge=1, le=180)
     target_duration: float = Field(30, ge=1, le=120)
     layout: Literal["blur", "crop"] = "blur"
+    subtitles: bool = True
     proxy: str | None = None
     cookies: str | None = None
     model: str | None = None

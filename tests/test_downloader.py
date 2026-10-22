@@ -132,3 +132,56 @@ def test_list_playlist_error(monkeypatch):
     monkeypatch.setattr(downloader, "YoutubeDL", BrokenYDL)
     with pytest.raises(downloader.DownloadError):
         downloader.list_playlist("https://rutube.ru/plst/1/")
+
+
+def test_list_playlist_bad_duration_is_unknown(monkeypatch):
+    class BadDurationYDL(FakePlaylistYDL):
+        def extract_info(self, url, download=False):
+            return {
+                "_type": "playlist",
+                "title": "Сборник",
+                "entries": [{
+                    "id": "v1",
+                    "title": "Первое",
+                    "duration": "неизвестно",
+                    "url": "https://rutube.ru/video/v1/",
+                }],
+            }
+
+    monkeypatch.setattr(downloader, "YoutubeDL", BadDurationYDL)
+    info = downloader.list_playlist("https://rutube.ru/plst/1/")
+    assert info.items[0].duration is None
+
+
+def test_download_ignores_partial_files(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(downloader, "YoutubeDL", FakeYDL)
+    (tmp_path / "source.mp4").write_bytes(b"video")
+    (tmp_path / "source.mp4.part").write_bytes(b"partial" * 100)
+    info = downloader.download("https://youtu.be/abc123", tmp_path)
+    assert info.source_path.name == "source.mp4"
+
+
+def test_download_bad_duration_falls_back_to_probe(tmp_path: Path, monkeypatch):
+    class BadDurationYDL(FakeYDL):
+        def extract_info(self, url, download=False):
+            data = super().extract_info(url, download=download)
+            data["duration"] = "n/a"
+            return data
+
+    monkeypatch.setattr(downloader, "YoutubeDL", BadDurationYDL)
+    monkeypatch.setattr(
+        downloader, "probe", lambda path: type("M", (), {"duration": 12.5})()
+    )
+    (tmp_path / "source.mp4").write_bytes(b"video")
+    info = downloader.download("https://youtu.be/abc123", tmp_path)
+    assert info.duration == 12.5
+
+
+def test_download_without_metadata(tmp_path: Path, monkeypatch):
+    class EmptyYDL(FakeYDL):
+        def extract_info(self, url, download=False):
+            return None
+
+    monkeypatch.setattr(downloader, "YoutubeDL", EmptyYDL)
+    with pytest.raises(downloader.DownloadError):
+        downloader.download("https://youtu.be/abc123", tmp_path)

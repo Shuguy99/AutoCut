@@ -72,3 +72,62 @@ def test_pipeline_cancel(sample_video: Path, config: Config, fake_transcript):
             str(sample_video), options, config,
             is_cancelled=lambda: True,
         )
+
+
+def test_pipeline_without_subtitles(
+    sample_video: Path, config: Config, fake_transcript
+):
+    options = JobOptions(
+        clips=1, min_duration=2, max_duration=4, target_duration=3,
+        subtitles=False,
+    )
+    result = run_pipeline(str(sample_video), options, config)
+    result_dir = Path(result["result_dir"])
+    clip = result["clips"][0]
+    assert clip["subtitle"] is None
+    assert Path(clip["file"]).exists()
+    assert not list((result_dir / "clips").glob("*.ass"))
+
+
+def test_pipeline_without_audio(
+    sample_video: Path, config: Config, monkeypatch
+):
+    from autocut.media import MediaInfo
+
+    monkeypatch.setattr(
+        "autocut.pipeline.probe",
+        lambda path: MediaInfo(
+            duration=6.0, width=640, height=360, fps=30.0, has_audio=False
+        ),
+    )
+
+    def no_transcribe(*args, **kwargs):
+        raise AssertionError("без аудио транскрипция не нужна")
+
+    monkeypatch.setattr("autocut.pipeline.transcribe", no_transcribe)
+    options = JobOptions(
+        clips=1, min_duration=2, max_duration=4, target_duration=3,
+    )
+    result = run_pipeline(str(sample_video), options, config)
+    result_dir = Path(result["result_dir"])
+    assert Path(result["clips"][0]["file"]).exists()
+    assert result["clips"][0]["subtitle"] is None
+    assert (result_dir / "transcript.json").exists()
+
+
+def test_transcript_cache_key_includes_model_and_language(tmp_path: Path):
+    from autocut.pipeline import _cached_transcript
+    from autocut.storage import save_transcript
+
+    transcript = Transcript(language="ru", words=[], segments=[], text="")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    _, path = _cached_transcript(cache, "video/../id", "small", "ru")
+    save_transcript(path, transcript)
+
+    found, _ = _cached_transcript(cache, "video/../id", "small", "ru")
+    assert found is not None
+    other, _ = _cached_transcript(cache, "video/../id", "base", "ru")
+    assert other is None
+    assert path.parent == cache
+    assert ".." not in path.name

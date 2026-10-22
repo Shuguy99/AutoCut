@@ -1,5 +1,8 @@
+"""Оркестрация одного задания: источник → анализ → субтитры → клипы."""
+
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 import uuid
@@ -7,16 +10,19 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
+
 from .config import Config
 from .downloader import download, is_url, prepare_local
 from .media import compute_rms_windows, detect_scenes, extract_audio, probe
-from .models import JobOptions, SourceInfo
+from .models import JobOptions, SourceInfo, Transcript
 from .render import render_clip, render_preview
 from .scoring import find_highlights
 from .storage import (
     create_result_dir,
     load_transcript,
     save_transcript,
+    slugify,
     write_json,
     write_srt,
 )
@@ -24,6 +30,8 @@ from .subtitles import Cue, group_words, write_ass
 from .transcribe import transcribe
 
 ProgressFn = Callable[[str, float, str], None]
+
+logger = logging.getLogger(__name__)
 
 
 def _preview_time(cues: list[Cue], start: float, end: float) -> float:
@@ -58,9 +66,31 @@ def _source_dict(info: SourceInfo) -> dict:
     return value
 
 
-def _cached_transcript(cache_dir: Path, video_id: str):
-    path = cache_dir / f"{video_id}.json"
-    return load_transcript(path) if path.exists() else None
+def _cached_transcript(cache_dir: Path, video_id: str, model: str, language: str | None):
+    """Читает кэш транскрипта с учётом модели и языка.
+
+    Повреждённый файл кэша не должен ронять задание: он удаляется, а
+    транскрипт пересчитывается заново.
+    """
+    key = "_".join(
+        (
+            slugify(video_id, ascii_only=True, max_len=40),
+            slugify(model, ascii_only=True, max_len=30),
+            slugify(language or "auto", ascii_only=True, max_len=12),
+        )
+    )
+    path = cache_dir / f"{key}.json"
+    if not path.exists():
+        return None, path
+    try:
+        return load_transcript(path), path
+    except (OSError, ValueError, TypeError, KeyError):
+        logger.warning("повреждённый кэш транскрипта, пересчитываю: %s", path)
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return None, path
 
 
 def run_pipeline(
@@ -70,6 +100,11 @@ def run_pipeline(
     progress: ProgressFn | None = None,
     is_cancelled: Callable[[], bool] | None = None,
 ) -> dict:
+    """Обрабатывает один источник и возвращает описание результата.
+
+    Исключения не глотаются: ``JobManager`` переводит их в статус ``failed``,
+    а CLI печатает понятное сообщение.
+    """
     report = progress or (lambda stage, pct, msg: None)
     output_dir = Path(config.output_dir).expanduser().resolve()
     work_root = Path(config.work_dir).expanduser().resolve()
@@ -80,6 +115,7 @@ def run_pipeline(
     cache_dir.mkdir(parents=True, exist_ok=True)
     log_path = work_dir / "job.log"
     result_dir: Path | None = None
+    clips: list[dict] = []
 
     def emit(stage: str, percent: float, message: str) -> None:
         stamp = time.strftime("%H:%M:%S")
@@ -110,19 +146,39 @@ def run_pipeline(
         duration = media.duration or info.duration
         if duration <= 0:
             raise PipelineError("не удалось определить длительность видео")
-        audio = extract_audio(info.source_path, work_dir / "audio.wav")
-        rms = compute_rms_windows(audio)
         scenes = detect_scenes(info.source_path)
+        if media.has_audio:
+            audio = extract_audio(info.source_path, work_dir / "audio.wav")
+            rms = compute_rms_windows(audio)
+        else:
+            emit(
+                "analyze", 25,
+                "аудиодорожка отсутствует — клипы будут без субтитров",
+            )
+            audio = None
+            rms = np.zeros(1, dtype=np.float32)
         _check_cancel(is_cancelled)
 
         emit("transcribe", 40, "распознавание речи")
-        transcript = _cached_transcript(cache_dir, info.video_id)
-        if transcript is None:
-            transcript = transcribe(
-                audio, model_name=model, device=config.device,
-                compute_type=config.compute_type, language=language,
+        transcript: Transcript | None = None
+        cache_path: Path | None = None
+        if audio is not None:
+            transcript, cache_path = _cached_transcript(
+                cache_dir, info.video_id, model, language
             )
-            save_transcript(cache_dir / f"{info.video_id}.json", transcript)
+        if transcript is None:
+            if audio is None:
+                transcript = Transcript(
+                    language=language or "unknown",
+                    words=[], segments=[], text="",
+                )
+            else:
+                transcript = transcribe(
+                    audio, model_name=model, device=config.device,
+                    compute_type=config.compute_type, language=language,
+                )
+                if cache_path is not None:
+                    save_transcript(cache_path, transcript)
         _check_cancel(is_cancelled)
 
         emit("score", 65, "поиск интересных фрагментов")
@@ -141,7 +197,6 @@ def run_pipeline(
             output_dir, info.channel, info.video_id, info.title,
             ascii_slug=config.ascii_slug,
         )
-        clips: list[dict] = []
         cliplist = [
             (index + 1, candidate)
             for index, candidate in enumerate(candidates)
@@ -153,13 +208,17 @@ def run_pipeline(
                 f"рендер клипа {index} из {len(cliplist)}",
             )
             try:
-                clip_words = [
-                    word for word in transcript.words
-                    if word.end > candidate.start and word.start < candidate.end
-                ]
-                cues = group_words(clip_words)
-                ass_path = work_dir / f"clip_{index:02d}.ass"
-                write_ass(cues, ass_path, candidate.start, candidate.end)
+                cues: list[Cue] = []
+                ass_path: Path | None = None
+                if options.subtitles and transcript.words:
+                    clip_words = [
+                        word for word in transcript.words
+                        if word.end > candidate.start
+                        and word.start < candidate.end
+                    ]
+                    cues = group_words(clip_words)
+                    ass_path = work_dir / f"clip_{index:02d}.ass"
+                    write_ass(cues, ass_path, candidate.start, candidate.end)
                 filename = (
                     f"clip_{index:02d}_score-{candidate.score:.2f}.mp4"
                 )
@@ -172,13 +231,16 @@ def run_pipeline(
                     out_path, result_dir / "clips" / f"clip_{index:02d}.jpg",
                     at=_preview_time(cues, candidate.start, candidate.end),
                 )
-                final_ass = result_dir / "clips" / f"clip_{index:02d}.ass"
-                shutil.copy2(ass_path, final_ass)
+                final_ass: str | None = None
+                if ass_path is not None:
+                    copied = result_dir / "clips" / f"clip_{index:02d}.ass"
+                    shutil.copy2(ass_path, copied)
+                    final_ass = str(copied)
                 clips.append({
                     "index": index,
                     "file": str(out_path),
                     "preview": str(preview),
-                    "subtitle": str(final_ass),
+                    "subtitle": final_ass,
                     "start": candidate.start,
                     "end": candidate.end,
                     "duration": round(candidate.end - candidate.start, 3),
@@ -186,7 +248,8 @@ def run_pipeline(
                     "parts": candidate.parts,
                     "text": " ".join(
                         word.text for word in transcript.words
-                        if candidate.start <= word.start < candidate.end
+                        if word.end > candidate.start
+                        and word.start < candidate.end
                     ),
                 })
             except CancelledError:
@@ -234,5 +297,7 @@ def run_pipeline(
         emit("failed", 0, str(exc))
         raise
     finally:
+        if result_dir is not None and not any("file" in clip for clip in clips):
+            shutil.rmtree(result_dir, ignore_errors=True)
         if not config.keep_work:
             shutil.rmtree(work_dir, ignore_errors=True)

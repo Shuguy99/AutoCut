@@ -3,6 +3,7 @@ const jobsRoot = document.getElementById("jobs");
 const formError = document.getElementById("form-error");
 const template = document.getElementById("job-template");
 const cards = new Map();
+const activeJobs = new Set();
 const feedRoot = document.getElementById("feed");
 const feedState = document.getElementById("feed-state");
 const feedMore = document.getElementById("feed-more");
@@ -21,6 +22,8 @@ const playlistRun = document.getElementById("playlist-run");
 const playlistTemplate = document.getElementById("playlist-item-template");
 const selectedPlaylist = new Map();
 let mode = "video";
+
+const ACTIVE_STATUSES = new Set(["queued", "running"]);
 
 const stageNames = {
   queued: "в очереди", start: "запуск", download: "скачивание",
@@ -54,6 +57,11 @@ function formatDuration(seconds) {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
+function formatTime(seconds) {
+  const value = Number(seconds);
+  return Number.isFinite(value) ? value.toFixed(1) : "?";
+}
+
 function apiError(data, status) {
   if (typeof data.detail === "string") return data.detail;
   if (Array.isArray(data.detail) && data.detail.length) {
@@ -64,6 +72,23 @@ function apiError(data, status) {
     return "Проверьте параметры запроса";
   }
   return `HTTP ${status}`;
+}
+
+function showError(message) {
+  formError.textContent = message;
+  formError.classList.remove("hidden");
+}
+
+function hideError() {
+  formError.textContent = "";
+  formError.classList.add("hidden");
+}
+
+function fallbackImage(image) {
+  image.addEventListener("error", () => {
+    image.remove();
+    image.closest(".feed-item, .playlist-item")?.classList.add("no-thumb");
+  }, { once: true });
 }
 
 function setMode(next) {
@@ -83,6 +108,7 @@ function currentOptions() {
     min_duration: Number(document.getElementById("min-duration").value),
     max_duration: Number(document.getElementById("max-duration").value),
     layout: document.getElementById("layout").value,
+    subtitles: document.getElementById("subtitles").checked,
     proxy: document.getElementById("proxy").value.trim() || null,
   };
 }
@@ -98,6 +124,7 @@ function playlistItem(item) {
   const checkbox = el("input", node);
   const image = el("img", node);
   if (item.thumbnail) {
+    fallbackImage(image);
     image.src = item.thumbnail;
     image.alt = item.title;
   } else {
@@ -110,13 +137,12 @@ function playlistItem(item) {
   checkbox.addEventListener("change", () => {
     if (checkbox.checked && selectedPlaylist.size >= 20) {
       checkbox.checked = false;
-      formError.textContent = "Можно выбрать не более 20 видео";
-      formError.classList.remove("hidden");
+      showError("Можно выбрать не более 20 видео");
       return;
     }
     if (checkbox.checked) selectedPlaylist.set(item.url, item);
     else selectedPlaylist.delete(item.url);
-    formError.classList.add("hidden");
+    hideError();
     updatePlaylistCount();
   });
   return node;
@@ -124,7 +150,7 @@ function playlistItem(item) {
 
 async function loadPlaylist(url) {
   playlistPanel.classList.remove("hidden");
-  playlistItemsRoot.innerHTML = "";
+  playlistItemsRoot.replaceChildren();
   selectedPlaylist.clear();
   updatePlaylistCount();
   playlistTitle.textContent = "Загружаем плейлист…";
@@ -178,13 +204,13 @@ playlistRun.addEventListener("click", async () => {
     for (const job of data.jobs || []) renderJob(job);
     startPolling();
     selectedPlaylist.clear();
-    playlistItemsRoot.innerHTML = "";
+    playlistItemsRoot.replaceChildren();
     updatePlaylistCount();
-    playlistTitle.textContent = "";
-    playlistCount.textContent = "";
+    playlistTitle.textContent = "Задачи запущены";
+    playlistCount.textContent = `${(data.jobs || []).length} шт.`;
+    hideError();
   } catch (err) {
-    formError.textContent = err.message;
-    formError.classList.remove("hidden");
+    showError(err.message);
   } finally {
     boxes.forEach((box) => { box.disabled = false; });
     playlistRun.disabled = selectedPlaylist.size === 0;
@@ -195,6 +221,7 @@ function feedCard(item) {
   const node = feedTemplate.content.firstElementChild.cloneNode(true);
   const image = el("img", node);
   if (item.thumbnail) {
+    fallbackImage(image);
     image.src = item.thumbnail;
     image.alt = item.title;
   } else {
@@ -210,6 +237,7 @@ function feedCard(item) {
     input.scrollIntoView({ behavior: "smooth", block: "center" });
     input.classList.add("flash");
     setTimeout(() => input.classList.remove("flash"), 1200);
+    setMode("video");
   });
   return node;
 }
@@ -217,19 +245,21 @@ function feedCard(item) {
 async function loadFeed(reset = false) {
   if (feedLoading) return;
   feedLoading = true;
-  if (reset) {
-    feedSeen.clear();
-    feedRoot.innerHTML = "";
-    feedOffset = 0;
-    feedMore.classList.add("hidden");
-  }
+  feedRefresh.disabled = true;
+  feedMore.disabled = true;
   feedState.classList.remove("error");
   feedState.textContent = "Загружаем ленту…";
+  const previousCount = feedSeen.size;
   try {
     const response = await fetch(`/api/feed?offset=${feedOffset}&limit=12`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(apiError(data, response.status));
+    }
+    if (reset) {
+      feedSeen.clear();
+      feedRoot.replaceChildren();
+      feedOffset = 0;
     }
     for (const item of data.items || []) {
       if (feedSeen.has(item.id)) continue;
@@ -238,12 +268,20 @@ async function loadFeed(reset = false) {
     }
     feedOffset = data.next_offset ?? feedOffset + 12;
     feedMore.classList.toggle("hidden", !data.has_more);
-    feedState.textContent = feedSeen.size ? "" : "Лента пуста.";
+    if (!feedSeen.size) {
+      feedState.textContent = "Лента пуста.";
+    } else if (!reset && feedSeen.size === previousCount) {
+      feedState.textContent = "Новых карточек нет — попробуйте ещё раз.";
+    } else {
+      feedState.textContent = "";
+    }
   } catch (err) {
-    feedState.textContent = `Лента недоступна: ${err.message}`;
+    feedState.textContent = err.message;
     feedState.classList.add("error");
   } finally {
     feedLoading = false;
+    feedRefresh.disabled = false;
+    feedMore.disabled = false;
   }
 }
 
@@ -265,16 +303,81 @@ function getCard(job) {
   };
   card.title.textContent = job.source;
   card.cancel.addEventListener("click", async () => {
-    await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
+    card.cancel.disabled = true;
+    try {
+      const response = await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(apiError(data, response.status));
+      }
+      await refresh();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      card.cancel.disabled = false;
+    }
   });
   jobsRoot.prepend(node);
   cards.set(job.id, card);
   return card;
 }
 
+function clipNode(clip) {
+  const item = document.createElement("div");
+  item.className = "clip";
+
+  if (clip.preview_url) {
+    const image = document.createElement("img");
+    image.src = clip.preview_url;
+    image.alt = `Клип ${clip.index}`;
+    image.loading = "lazy";
+    item.append(image);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "clip-meta";
+  const title = document.createElement("strong");
+  title.textContent = `Клип ${clip.index}`;
+  meta.append(title);
+
+  const details = document.createElement("span");
+  if (clip.error) {
+    details.textContent = `Ошибка: ${clip.error}`;
+    details.classList.add("clip-error");
+  } else {
+    details.textContent =
+      `${formatTime(clip.start)}–${formatTime(clip.end)} с · score ${Number(clip.score || 0).toFixed(2)}`;
+  }
+  meta.append(details);
+
+  const links = document.createElement("div");
+  links.className = "clip-links";
+  if (clip.file_url) {
+    const download = document.createElement("a");
+    download.href = clip.file_url;
+    download.download = "";
+    download.textContent = "скачать mp4";
+    links.append(download);
+  }
+  if (clip.subtitle_url) {
+    const subtitle = document.createElement("a");
+    subtitle.href = clip.subtitle_url;
+    subtitle.download = "";
+    subtitle.textContent = "ass";
+    links.append(subtitle);
+  }
+  if (links.childElementCount) meta.append(links);
+
+  item.append(meta);
+  return item;
+}
+
 function renderJob(job) {
   const card = getCard(job);
-  const active = ["queued", "running"].includes(job.status);
+  const active = ACTIVE_STATUSES.has(job.status);
+  if (active) activeJobs.add(job.id);
+  else activeJobs.delete(job.id);
+
   card.node.dataset.status = job.status;
   card.cancel.classList.toggle("hidden", !active);
   card.bar.style.width = `${Math.max(0, Math.min(100, job.progress || 0))}%`;
@@ -287,22 +390,10 @@ function renderJob(job) {
   if (result && result.result_dir) {
     card.folder.textContent = result.result_dir;
   }
-  if (result && result.clips) {
-    card.clips.innerHTML = "";
+  if (result && Array.isArray(result.clips)) {
+    card.clips.replaceChildren();
     for (const clip of result.clips) {
-      const item = document.createElement("div");
-      item.className = "clip";
-      item.innerHTML = `
-        ${clip.preview_url ? `<img src="${clip.preview_url}" alt="">` : ""}
-        <div class="clip-meta">
-          <strong>Клип ${clip.index}</strong>
-          <span>${Number(clip.start).toFixed(1)}–${Number(clip.end).toFixed(1)} с · score ${Number(clip.score).toFixed(2)}</span>
-          <div class="clip-links">
-            ${clip.file_url ? `<a href="${clip.file_url}" download>скачать mp4</a>` : ""}
-            ${clip.subtitle_url ? `<a href="${clip.subtitle_url}" download>ass</a>` : ""}
-          </div>
-        </div>`;
-      card.clips.append(item);
+      card.clips.append(clipNode(clip));
     }
   }
 }
@@ -310,6 +401,7 @@ function renderJob(job) {
 async function refresh() {
   try {
     const response = await fetch("/api/jobs");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const jobs = await response.json();
     jobs.forEach(renderJob);
   } catch (err) {
@@ -319,12 +411,16 @@ async function refresh() {
 
 function startPolling() {
   if (pollTimer) return;
-  pollTimer = setInterval(refresh, 1200);
+  const tick = async () => {
+    await refresh();
+    pollTimer = activeJobs.size ? setTimeout(tick, 1500) : null;
+  };
+  pollTimer = setTimeout(tick, 0);
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  formError.classList.add("hidden");
+  hideError();
   const source = document.getElementById("source").value.trim();
   if (!source) return;
 
@@ -336,8 +432,7 @@ form.addEventListener("submit", async (event) => {
     } catch (err) {
       playlistTitle.textContent = "Не удалось загрузить плейлист";
       playlistCount.textContent = "";
-      formError.textContent = err.message;
-      formError.classList.remove("hidden");
+      showError(err.message);
     } finally {
       submitButton.disabled = false;
     }
@@ -345,6 +440,8 @@ form.addEventListener("submit", async (event) => {
   }
 
   const payload = { source, options: currentOptions() };
+  const submitButton = document.getElementById("submit");
+  submitButton.disabled = true;
   try {
     const response = await fetch("/api/jobs", {
       method: "POST",
@@ -367,12 +464,13 @@ form.addEventListener("submit", async (event) => {
       events.close();
       startPolling();
     };
-    setTimeout(refresh, 300);
   } catch (err) {
-    formError.textContent = err.message;
-    formError.classList.remove("hidden");
+    showError(err.message);
+  } finally {
+    submitButton.disabled = false;
   }
 });
 
-refresh();
-setInterval(refresh, 3000);
+refresh().then(() => {
+  if (activeJobs.size) startPolling();
+});

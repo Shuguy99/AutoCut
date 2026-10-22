@@ -20,10 +20,13 @@ dependencies = [
 # Локальное распознавание речи. Тяжёлый стек (ctranslate2, onnxruntime, av),
 # ставится отдельно: pip install -e ".[whisper]"
 whisper = ["faster-whisper>=1.1.0"]
+# Нативное окно приложения. Без extra используется Chrome --app или браузер.
+app = ["pywebview>=5.0"]
 dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [project.scripts]
 autocut = "autocut.cli:main"
+autocut-app = "autocut.cli:main_app"
 
 [tool.setuptools.packages.find]
 include = ["autocut*"]

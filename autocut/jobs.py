@@ -1,3 +1,5 @@
+"""In-memory очередь задач с одним worker-потоком."""
+
 from __future__ import annotations
 
 import logging
@@ -8,10 +10,22 @@ import uuid
 from dataclasses import dataclass, field
 
 from .config import Config
+from .downloader import DownloadError
+from .media import MediaError
 from .models import JobOptions
-from .pipeline import CancelledError, run_pipeline
+from .pipeline import CancelledError, PipelineError, run_pipeline
+from .render import RenderError
+from .transcribe import TranscriptionError
 
 logger = logging.getLogger(__name__)
+
+EXPECTED_ERRORS = (
+    PipelineError,
+    DownloadError,
+    TranscriptionError,
+    MediaError,
+    RenderError,
+)
 
 
 class QueueFullError(RuntimeError):
@@ -50,12 +64,19 @@ class Job:
 
 
 class JobManager:
+    """Последовательная очередь задач.
+
+    ``max_queue`` ограничивает число ожидающих задач (запущенная задача в
+    очередь не входит). Один worker обрабатывает задачи по одной.
+    """
+
     def __init__(self, config: Config, runner=run_pipeline, max_queue: int = 3):
         self._config = config
         self._runner = runner
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
-        self._queue: queue.Queue[Job | None] = queue.Queue(maxsize=max_queue)
+        self._closed = False
+        self._queue: queue.Queue[Job] = queue.Queue(maxsize=max_queue)
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
@@ -65,11 +86,15 @@ class JobManager:
     def submit_many(
         self, sources: list[str], options: JobOptions
     ) -> list[Job]:
+        if not sources:
+            raise ValueError("нужен хотя бы один источник")
         jobs = [
             Job(id=uuid.uuid4().hex[:12], source=source, options=options)
             for source in sources
         ]
         with self._lock:
+            if self._closed:
+                raise QueueFullError("менеджер задач остановлен")
             free = self._queue.maxsize - self._queue.qsize()
             if len(jobs) > free:
                 raise QueueFullError(
@@ -80,7 +105,7 @@ class JobManager:
             try:
                 for job in jobs:
                     self._queue.put_nowait(job)
-            except queue.Full as exc:
+            except queue.Full as exc:  # защита от гонки с shutdown
                 for job in jobs:
                     self._jobs.pop(job.id, None)
                 raise QueueFullError(
@@ -95,32 +120,41 @@ class JobManager:
     def list(self) -> list[Job]:
         with self._lock:
             jobs = list(self._jobs.values())
-        return sorted(jobs, key=lambda job: job.created_at, reverse=True)
+        return sorted(
+            jobs, key=lambda job: (job.created_at, job.id), reverse=True
+        )
 
     def cancel(self, job_id: str) -> bool:
-        job = self.get(job_id)
-        if job is None or job.status in {"done", "failed", "cancelled"}:
-            return False
-        job.cancel_event.set()
-        if job.status == "queued":
-            job.status = "cancelled"
-            job.message = "отменено до запуска"
-        return True
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status in {"done", "failed", "cancelled"}:
+                return False
+            job.cancel_event.set()
+            if job.status == "queued":
+                job.status = "cancelled"
+                job.message = "отменено до запуска"
+            return True
 
     def shutdown(self) -> None:
-        try:
-            self._queue.put(None, timeout=1)
-        except queue.Full:
-            pass
-        self._thread.join(timeout=2)
+        """Останавливает worker после текущей задачи."""
+        with self._lock:
+            self._closed = True
+        self._thread.join(timeout=5)
 
     def _worker(self) -> None:
         while True:
-            job = self._queue.get()
-            if job is None:
-                self._queue.task_done()
-                return
             try:
+                job = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                if self._closed:
+                    return
+                continue
+            try:
+                if self._closed:
+                    if job.status == "queued":
+                        job.status = "cancelled"
+                        job.message = "менеджер задач остановлен"
+                    return
                 if job.cancel_event.is_set():
                     job.status = "cancelled"
                     job.message = "отменено до запуска"
@@ -147,6 +181,11 @@ class JobManager:
             except CancelledError:
                 job.status = "cancelled"
                 job.message = "отменено"
+            except EXPECTED_ERRORS as exc:
+                logger.warning("job %s failed: %s", job.id, exc)
+                job.status = "failed"
+                job.error = str(exc)
+                job.message = "ошибка"
             except Exception as exc:  # noqa: BLE001
                 logger.exception("job %s failed", job.id)
                 job.status = "failed"

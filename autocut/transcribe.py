@@ -1,3 +1,5 @@
+"""Локальное распознавание речи через faster-whisper."""
+
 from __future__ import annotations
 
 import wave
@@ -104,6 +106,7 @@ def transcribe(
     compute_type: str = "int8",
     language: str | None = None,
 ) -> Transcript:
+    """Распознаёт речь и возвращает слова/сегменты с таймкодами."""
     model = _get_model(model_name, device, compute_type)
     try:
         raw_segments, info = model.transcribe(

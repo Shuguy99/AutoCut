@@ -130,3 +130,24 @@ def test_fetch_feed_bad_payload(monkeypatch):
     monkeypatch.setattr(feed, "_fetch_json", lambda url, timeout: {"items": []})
     with pytest.raises(feed.FeedError):
         feed.fetch_feed()
+
+
+def test_fetch_feed_survives_non_numeric_views(monkeypatch):
+    payload = {"results": [_raw("bad", hits="много"), _raw("good", hits=5)]}
+    monkeypatch.setattr(feed, "_fetch_json", lambda url, timeout: payload)
+    page = feed.fetch_feed()
+    views = {item["id"]: item["views"] for item in page.items}
+    assert views == {"bad": 0, "good": 5}
+
+
+def test_fetch_feed_clamps_limit(monkeypatch):
+    calls = []
+
+    def fake_fetch(url, timeout):
+        calls.append(url)
+        return {"results": []}
+
+    monkeypatch.setattr(feed, "_fetch_json", fake_fetch)
+    page = feed.fetch_feed(limit=0)
+    assert page.items == []
+    assert "limit=50" in calls[0]

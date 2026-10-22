@@ -1,3 +1,5 @@
+"""Загрузка конфигурации: defaults → config.yaml → переменные окружения → CLI."""
+
 from __future__ import annotations
 
 import os
@@ -34,6 +36,7 @@ _ENV = {
     "ascii_slug": "AUTOCUT_ASCII_SLUG",
     "keep_work": "AUTOCUT_KEEP_WORK",
     "language": "AUTOCUT_LANGUAGE",
+    "max_height": "AUTOCUT_MAX_HEIGHT",
 }
 
 _BOOL_KEYS = {"ascii_slug", "keep_work"}
@@ -46,6 +49,11 @@ def _as_bool(value: Any) -> bool:
 
 
 def load_config(path: Path | None = None, **overrides: Any) -> Config:
+    """Собирает конфиг с приоритетом YAML < env < явные overrides.
+
+    ``overrides`` со значением ``None`` игнорируются, чтобы CLI-флаги не
+    затирали значения из файла/окружения.
+    """
     data: dict[str, Any] = {
         "output_dir": Path("output"),
         "work_dir": Path("work"),
@@ -74,7 +82,12 @@ def load_config(path: Path | None = None, **overrides: Any) -> Config:
 
     for key in _BOOL_KEYS:
         data[key] = _as_bool(data[key])
-    data["max_height"] = int(data["max_height"])
+    try:
+        data["max_height"] = int(data["max_height"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("max_height должен быть целым числом") from exc
+    if data["max_height"] < 240:
+        raise ValueError("max_height должен быть не меньше 240")
     data["output_dir"] = Path(data["output_dir"]).expanduser()
     data["work_dir"] = Path(data["work_dir"]).expanduser()
     if data["cookies"]:

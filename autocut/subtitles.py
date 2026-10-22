@@ -1,3 +1,5 @@
+"""Группировка слов в реплики и генерация ASS/SRT."""
+
 from __future__ import annotations
 
 import textwrap
@@ -44,6 +46,7 @@ def group_words(
     max_duration: float = 4.0,
     pause: float = 0.6,
 ) -> list[Cue]:
+    """Собирает слова в короткие реплики по пунктуации и паузам."""
     cues: list[Cue] = []
     current: list[Word] = []
 
@@ -100,6 +103,7 @@ def build_ass(
     font_size: int = 48,
     margin_v: int = 230,
 ) -> str:
+    """Собирает ASS с таймингами, сдвинутыми к началу клипа."""
     header = ASS_HEADER.format(font=font, size=font_size, margin=margin_v)
     events: list[str] = []
     for cue in cues:
@@ -122,6 +126,7 @@ def write_ass(
     clip_end: float,
     **kwargs,
 ) -> Path:
+    """Пишет ASS-файл и создаёт родительскую папку."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -139,6 +144,7 @@ def _srt_time(seconds: float) -> str:
 
 
 def to_srt(cues: list[Cue]) -> str:
+    """Преобразует реплики в SRT (для отладки и внешних редакторов)."""
     blocks: list[str] = []
     for index, cue in enumerate(cues, start=1):
         text = cue.text.replace("\n", " ")

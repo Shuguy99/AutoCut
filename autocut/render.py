@@ -1,3 +1,5 @@
+"""Рендер вертикальных клипов и превью через ffmpeg."""
+
 from __future__ import annotations
 
 import subprocess
@@ -22,7 +24,7 @@ def render_clip(
     source: Path | str,
     start: float,
     end: float,
-    ass_path: Path,
+    ass_path: Path | None,
     out_path: Path,
     layout: str = "blur",
     width: int = 1080,
@@ -31,14 +33,16 @@ def render_clip(
     crf: int = 20,
     encoder: Encoder | None = None,
 ) -> Path:
+    """Рендерит клип; ``ass_path=None`` — без вжигания субтитров."""
     source = Path(source).resolve()
     out_path = Path(out_path).resolve()
-    ass_path = Path(ass_path).resolve()
+    resolved_ass = Path(ass_path).resolve() if ass_path else None
     out_path.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.1, end - start)
-    subs = ass_path.name
+    subs = resolved_ass.name if resolved_ass else None
     encoder = encoder or detect_h264_encoder()
     hw_upload = ",format=nv12,hwupload" if encoder.hwupload else ""
+    burn = f",subtitles=filename={subs}" if subs else ""
 
     cmd = [
         FFMPEG, "-y", "-v", "error",
@@ -51,7 +55,7 @@ def render_clip(
     if layout == "crop":
         video_filter = (
             f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},subtitles=filename={subs}{hw_upload}"
+            f"crop={width}:{height}{burn}{hw_upload}"
         )
         cmd += ["-vf", video_filter, "-map", "0:v", "-map", "0:a?"]
     else:
@@ -60,8 +64,7 @@ def render_clip(
             f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
             f"crop={width}:{height},gblur=sigma=30[bgv];"
             f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fgv];"
-            f"[bgv][fgv]overlay=(W-w)/2:(H-h)/2,"
-            f"subtitles=filename={subs}{hw_upload}[v]"
+            f"[bgv][fgv]overlay=(W-w)/2:(H-h)/2{burn}{hw_upload}[v]"
         )
         cmd += ["-filter_complex", complex_filter, "-map", "[v]", "-map", "0:a?"]
 
@@ -73,7 +76,7 @@ def render_clip(
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
         "-movflags", "+faststart", str(out_path),
     ]
-    _run(cmd, cwd=ass_path.parent)
+    _run(cmd, cwd=resolved_ass.parent if resolved_ass else out_path.parent)
     if not out_path.exists() or out_path.stat().st_size == 0:
         raise RenderError("ffmpeg завершился без ошибки, но файл не создан")
     return out_path
