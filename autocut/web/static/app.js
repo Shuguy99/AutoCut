@@ -109,6 +109,14 @@ function currentOptions() {
     max_duration: Number(document.getElementById("max-duration").value),
     layout: document.getElementById("layout").value,
     subtitles: document.getElementById("subtitles").checked,
+    variation: document.getElementById("variation").value,
+    style: document.getElementById("style").value,
+    caption_mode: document.getElementById("caption-mode").value,
+    hook: document.getElementById("hook").checked,
+    end_card: document.getElementById("end-card").checked,
+    watermark: document.getElementById("watermark").value.trim() || null,
+    loudnorm: document.getElementById("loudnorm").checked,
+    safe_zones: document.getElementById("safe-zones").checked,
     proxy: document.getElementById("proxy").value.trim() || null,
   };
 }
@@ -298,6 +306,7 @@ function getCard(job) {
     cancel: el(".cancel", node),
     bar: el(".bar", node),
     status: el(".job-status", node),
+    diversity: el(".diversity", node),
     folder: el(".folder", node),
     clips: el(".clips", node),
   };
@@ -350,6 +359,15 @@ function clipNode(clip) {
   }
   meta.append(details);
 
+  if (clip.variant) {
+    const variant = document.createElement("span");
+    variant.className = "clip-variant";
+    const parts = [`стиль: ${clip.variant.style}`];
+    if (clip.variant.hook) parts.push(`хук: ${clip.variant.hook}`);
+    variant.textContent = parts.join(" · ");
+    meta.append(variant);
+  }
+
   const links = document.createElement("div");
   links.className = "clip-links";
   if (clip.file_url) {
@@ -365,6 +383,13 @@ function clipNode(clip) {
     subtitle.download = "";
     subtitle.textContent = "ass";
     links.append(subtitle);
+  }
+  if (clip.publish_url) {
+    const publish = document.createElement("a");
+    publish.href = clip.publish_url;
+    publish.download = "";
+    publish.textContent = "подпись";
+    links.append(publish);
   }
   if (links.childElementCount) meta.append(links);
 
@@ -389,6 +414,16 @@ function renderJob(job) {
   const result = job.result;
   if (result && result.result_dir) {
     card.folder.textContent = result.result_dir;
+  }
+  if (result && result.diversity) {
+    const diversity = result.diversity;
+    const similar = Math.round((diversity.max_similarity || 0) * 100);
+    card.diversity.classList.toggle("warning", !diversity.ok);
+    card.diversity.textContent = diversity.ok
+      ? `Разнообразие клипов: ${Math.round((diversity.score || 1) * 100)}%`
+      : `Клипы похожи на ${similar}% — замените один из них перед публикацией`;
+  } else {
+    card.diversity.textContent = "";
   }
   if (result && Array.isArray(result.clips)) {
     card.clips.replaceChildren();

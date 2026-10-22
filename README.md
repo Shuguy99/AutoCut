@@ -11,7 +11,16 @@
    сменам сцен;
 3. распознаёт речь через faster-whisper и вжигает небольшие субтитры снизу
    (отключается `--no-subtitles` или галочкой в вебе);
-4. сохраняет клипы по папкам на каждое исходное видео.
+4. делает клипы из одной пачки разными: чередует стили субтитров, добавляет
+   хук, финальную плашку и водяной знак, слегка меняет кадрирование и
+   цветокоррекцию;
+5. нормализует громкость до −14 LUFS и проверяет текстовую похожесть клипов;
+6. сохраняет клипы, `diversity.json` и черновики подписей `publish.json` по
+   папкам на каждое исходное видео.
+
+Вариативность не заменяет содержательную переработку чужого видео и не
+гарантирует отсутствие ограничений TikTok. Честный чек-лист —
+[docs/uniqueness.md](docs/uniqueness.md).
 
 Один движок используется из CLI, веб-интерфейса и настольного приложения.
 Подробности — в [docs/](docs/README.md).
@@ -76,7 +85,8 @@ libopenh264 → mpeg4), потому что в Fedora-сборке `ffmpeg-free`
 Режим «Плейлист» позволяет загрузить список видео, отметить нужные чекбоксами
 и запустить нарезку пакетом — каждое видео обрабатывается отдельной задачей.
 За один запуск можно выбрать не более 20 видео; очередь веб-приложения вмещает
-20 задач. Галочка «Субтитры» отключает вжигание ASS.
+20 задач. Галочка «Субтитры» отключает распознанные реплики; хук, финальная
+плашка и водяной знак настраиваются отдельно в блоке «Уникальность».
 
 HTTP API (jobs, SSE, плейлисты, отдача файлов) описан в
 [docs/api.md](docs/api.md).
@@ -87,6 +97,8 @@ HTTP API (jobs, SSE, плейлисты, отдача файлов) описан
 .venv/bin/autocut run "https://youtu.be/..." --clips 5
 .venv/bin/autocut run "https://rutube.ru/video/..." --clips 3
 .venv/bin/autocut run ./video.mp4 --clips 3 --format crop
+.venv/bin/autocut run ./video.mp4 --variation strong --watermark "@nick"
+.venv/bin/autocut run ./video.mp4 --style karaoke --caption-mode word
 .venv/bin/autocut run ./video.mp4 --no-subtitles
 .venv/bin/autocut run "https://rutube.ru/plst/308547/" --playlist-limit 5
 .venv/bin/autocut trending --region RU
@@ -105,10 +117,13 @@ CLI возьмёт первые N видео и обработает их пос
 ```
 output/<канал>/<video_id>_<название>/
   clips/clip_01_score-0.87.mp4
-  clips/clip_01.ass        # только при включённых субтитрах
+  clips/clip_01.ass        # субтитры и/или плашки
   clips/clip_01.jpg
+  clips/clip_01_publish.json
   transcript.srt
   transcript.json
+  publish.json
+  diversity.json
   metadata.json
   source.json
   job.log
@@ -133,6 +148,7 @@ output/<канал>/<video_id>_<название>/
 - [docs/architecture.md](docs/architecture.md) — модули и поток данных;
 - [docs/api.md](docs/api.md) — HTTP API и SSE;
 - [docs/configuration.md](docs/configuration.md) — конфиг и параметры;
+- [docs/uniqueness.md](docs/uniqueness.md) — вариативность и публикация;
 - [docs/desktop.md](docs/desktop.md) — настольное окно;
 - [docs/development.md](docs/development.md) — тесты и отладка;
 - [docs/troubleshooting.md](docs/troubleshooting.md) — типовые ошибки.
@@ -159,4 +175,7 @@ output/<канал>/<video_id>_<название>/
 - `trending` работает только с лентой популярного YouTube.
 - Речь распознаётся локально на CPU; `small` — компромисс скорости и качества.
 - Авто-рефрейминг по лицам не реализован: только `blur` и `crop`.
+- Вариативность меняет оформление и кадрирование, но не заменяет
+  содержательную переработку чужого видео и не гарантирует отсутствие
+  ограничений TikTok.
 - Права на исходное видео — ответственность пользователя.

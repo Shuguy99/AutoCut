@@ -95,6 +95,7 @@ def _job_payload(job: Job, config: Config) -> dict:
             item["file_url"] = url(clip.get("file"))
             item["preview_url"] = url(clip.get("preview"))
             item["subtitle_url"] = url(clip.get("subtitle"))
+            item["publish_url"] = url(clip.get("publish_file"))
             clips.append(item)
         data["result"] = {**data["result"], "clips": clips}
         folder = data["result"].get("result_dir")

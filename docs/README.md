@@ -8,6 +8,7 @@ AutoCut — локальный конвейер «видео → вертика�
 | [architecture.md](architecture.md) | модули, поток данных, решения и ограничения |
 | [api.md](api.md) | HTTP API, SSE, коды ошибок |
 | [configuration.md](configuration.md) | `config.yaml`, переменные окружения, параметры задачи |
+| [uniqueness.md](uniqueness.md) | вариативность клипов, публикация в TikTok и честный чек-лист |
 | [desktop.md](desktop.md) | запуск как приложения, Chrome `--app`, pywebview |
 | [development.md](development.md) | установка, тесты, стиль, отладка |
 | [troubleshooting.md](troubleshooting.md) | типовые ошибки ffmpeg, Whisper, сети |

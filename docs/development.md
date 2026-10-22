@@ -21,9 +21,10 @@ python3 -m venv .venv
 
 - `test_config.py` — приоритет YAML/env, булевы значения, `max_height`;
 - `test_media.py`, `test_scoring.py`, `test_subtitles.py` — анализ и субтитры;
+- `test_variation.py` — стили, хуки, подписи и diversity-отчёт;
 - `test_downloader.py` — yt-dlp-заглушки, плейлисты, битые поля;
 - `test_pipeline.py` — полный цикл на синтетическом видео, кэш, отсутствие
-  аудио, отключённые субтитры;
+  аудио, отключённые субтитры, варианты и publish-файлы;
 - `test_jobs.py` — очередь, отмена, shutdown;
 - `test_api.py` — FastAPI через `TestClient`, валидация, path traversal;
 - `test_desktop.py` — выбор порта, URL, запуск/остановка сервера.

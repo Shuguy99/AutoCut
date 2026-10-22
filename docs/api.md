@@ -99,6 +99,14 @@ HTML-интерфейс.
     "target_duration": 30,
     "layout": "blur",
     "subtitles": true,
+    "variation": "subtle",
+    "style": "auto",
+    "caption_mode": "phrase",
+    "hook": true,
+    "end_card": true,
+    "watermark": "@nick",
+    "loudnorm": true,
+    "safe_zones": true,
     "proxy": null
   }
 }
@@ -106,6 +114,19 @@ HTML-интерфейс.
 
 `source` обрезается; пустая строка → `422`. Все поля `options`
 необязательны, значения по умолчанию — в `JobOptions`.
+
+| Поле | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `variation` | `off`/`subtle`/`strong` | `subtle` | сила различий между клипами |
+| `style` | `auto`/`clean`/`bold`/`karaoke`/`minimal` | `auto` | стиль субтитров |
+| `caption_mode` | `phrase`/`word` | `phrase` | фразы или подсветка слов |
+| `hook` | bool | `true` | хук в начале клипа |
+| `end_card` | bool | `true` | финальная плашка |
+| `watermark` | string \| null | `null` | водяной знак (до 40 символов) |
+| `loudnorm` | bool | `true` | громкость −14 LUFS |
+| `safe_zones` | bool | `true` | отступ под интерфейс TikTok |
+
+Ошибка `422` — неизвестный стиль/режим или слишком длинный `watermark`.
 Ошибка `429` — очередь заполнена.
 
 Ответ — объект задачи (см. ниже) со статусом `queued`.
@@ -178,10 +199,24 @@ done | failed | cancelled`.
     "score": 0.87,
     "parts": {"energy": 0.9, "speech": 0.8},
     "text": "текст фрагмента",
+    "variant": {
+      "style": "karaoke", "zoom": 1.04, "pan_x": 0.02,
+      "grade": {"contrast": 1.03, "saturation": 1.04},
+      "hook": "Первая фраза", "end_card": "Ещё в профиле",
+      "watermark": "@nick"
+    },
+    "publish": {
+      "title": "Первая фраза",
+      "description": "Расшифровка…",
+      "hashtags": ["#деньги", "#успех"]
+    },
+    "publish_file": "/abs/.../clip_01_publish.json",
     "file_url": "/files/.../clip_01_score-0.87.mp4",
     "preview_url": "/files/.../clip_01.jpg",
-    "subtitle_url": "/files/.../clip_01.ass"
+    "subtitle_url": "/files/.../clip_01.ass",
+    "publish_url": "/files/.../clip_01_publish.json"
   }],
+  "diversity": {"score": 0.72, "max_similarity": 0.28, "ok": true, "pairs": []},
   "folder_url": "/files/.../metadata.json"
 }
 ```
@@ -189,7 +224,8 @@ done | failed | cancelled`.
 `*_url` равны `null`, если файл лежит вне `output_dir`.
 У неудавшегося клипа есть `error` вместо `file`/`preview`/`subtitle`.
 `result.folder_url` ведёт на `metadata.json` — это единственный файл, который
-удобно отдать как «папку».
+удобно отдать как «папку». `diversity` и `publish` также сохраняются в
+`diversity.json` и `publish.json` в папке результата.
 
 ### `DELETE /api/jobs/{job_id}`
 

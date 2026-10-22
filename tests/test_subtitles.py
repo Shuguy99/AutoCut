@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from autocut.models import Word
-from autocut.subtitles import build_ass, group_words, to_srt, write_ass
+from autocut.subtitles import build_ass, get_style, group_words, to_srt, write_ass
 
 
 def _words(text: str, start: float = 0.0, step: float = 0.4) -> list[Word]:
@@ -57,3 +57,58 @@ def test_to_srt():
     srt = to_srt(cues)
     assert "00:00:00,000 -->" in srt
     assert "привет мир" in srt
+
+
+def test_ass_contains_hook_end_card_and_watermark():
+    cues = group_words(_words("привет мир"))
+    ass = build_ass(
+        cues, 0.0, 6.0,
+        style=get_style("clean"),
+        hook="ГЛАВНЫЙ ХУК",
+        end_card="Ещё в профиле\n@nick",
+        watermark="@nick",
+        safe_zones=True,
+    )
+    assert "Style: Hook" in ass
+    assert "Style: EndCard" in ass
+    assert "Style: Watermark" in ass
+    assert "Dialogue: 1," in ass
+    assert "ГЛАВНЫЙ ХУК" in ass
+    assert r"Ещё в профиле\N@nick" in ass
+    assert ",60,60,310,1" in ass
+
+
+def test_ass_word_mode_highlights_current_word():
+    words = [
+        Word(0.0, 0.3, "один"),
+        Word(0.4, 0.7, "два"),
+        Word(0.8, 1.1, "три"),
+    ]
+    ass = build_ass(
+        [], 0.0, 2.0,
+        style=get_style("karaoke"),
+        words=words,
+        caption_mode="word",
+    )
+    assert r"\c&H" in ass
+    assert "один" in ass
+    assert "два" in ass
+    assert "три" in ass
+
+
+def test_ass_bold_style_uppercases_text():
+    cues = group_words(_words("привет мир"))
+    ass = build_ass(cues, 0.0, 3.0, style=get_style("bold"))
+    assert "ПРИВЕТ МИР" in ass
+    assert "DejaVu Sans" in ass
+
+
+def test_ass_overlays_without_captions():
+    ass = build_ass(
+        [], 0.0, 4.0,
+        hook="Хук", watermark="@nick", end_card="Финал",
+    )
+    assert "Dialogue:" in ass
+    assert "Хук" in ass
+    assert "@nick" in ass
+    assert "Финал" in ass

@@ -67,6 +67,60 @@
           <input id="proxy" type="text" placeholder="socks5://127.0.0.1:1080">
         </label>
 
+        <fieldset class="variation">
+          <legend>Уникальность и оформление</legend>
+          <div class="row">
+            <label class="field small">
+              <span>Вариативность</span>
+              <select id="variation">
+                <option value="off">Выкл</option>
+                <option value="subtle" selected>Мягкая</option>
+                <option value="strong">Сильная</option>
+              </select>
+            </label>
+            <label class="field small">
+              <span>Стиль субтитров</span>
+              <select id="style">
+                <option value="auto" selected>Авто</option>
+                <option value="clean">Clean</option>
+                <option value="bold">Bold</option>
+                <option value="karaoke">Karaoke</option>
+                <option value="minimal">Minimal</option>
+              </select>
+            </label>
+            <label class="field small">
+              <span>Режим текста</span>
+              <select id="caption-mode">
+                <option value="phrase" selected>Фразы</option>
+                <option value="word">По словам</option>
+              </select>
+            </label>
+            <label class="field small">
+              <span>Водяной знак</span>
+              <input id="watermark" type="text" maxlength="40"
+                     placeholder="@nick">
+            </label>
+          </div>
+          <div class="row">
+            <label class="field toggle">
+              <span>Хук</span>
+              <input id="hook" type="checkbox" checked>
+            </label>
+            <label class="field toggle">
+              <span>Финальная плашка</span>
+              <input id="end-card" type="checkbox" checked>
+            </label>
+            <label class="field toggle">
+              <span>Громкость −14 LUFS</span>
+              <input id="loudnorm" type="checkbox" checked>
+            </label>
+            <label class="field toggle">
+              <span>Безопасные зоны</span>
+              <input id="safe-zones" type="checkbox" checked>
+            </label>
+          </div>
+        </fieldset>
+
         <button id="submit" type="submit">Сделать клипы</button>
         <p id="form-error" class="error hidden" role="alert" aria-live="polite"></p>
 
@@ -94,6 +148,7 @@
       </div>
       <div class="progress"><div class="bar"></div></div>
       <div class="job-status"></div>
+      <div class="diversity"></div>
       <div class="folder"></div>
       <div class="clips"></div>
     </article>

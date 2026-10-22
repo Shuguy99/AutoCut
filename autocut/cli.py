@@ -49,6 +49,38 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
         "--no-subtitles", dest="subtitles", action="store_false",
         help="не вжигать субтитры в клипы",
     )
+    parser.add_argument(
+        "--variation", choices=["off", "subtle", "strong"], default="subtle",
+        help="вариативность стиля и кадрирования клипов",
+    )
+    parser.add_argument(
+        "--style",
+        choices=["auto", "clean", "bold", "karaoke", "minimal"],
+        default="auto", help="стиль субтитров (auto — чередовать)",
+    )
+    parser.add_argument(
+        "--caption-mode", choices=["phrase", "word"], default="phrase",
+        help="показывать фразы или подсвечивать слова",
+    )
+    parser.add_argument(
+        "--watermark", default=None, help="водяной знак, например @nick",
+    )
+    parser.add_argument(
+        "--no-hook", dest="hook", action="store_false",
+        help="не показывать хук в первые секунды",
+    )
+    parser.add_argument(
+        "--no-end-card", dest="end_card", action="store_false",
+        help="не показывать финальную плашку",
+    )
+    parser.add_argument(
+        "--no-loudnorm", dest="loudnorm", action="store_false",
+        help="не нормализовать громкость под TikTok",
+    )
+    parser.add_argument(
+        "--no-safe-zones", dest="safe_zones", action="store_false",
+        help="не поднимать субтитры над интерфейсом TikTok",
+    )
     parser.add_argument("--keep-work", action="store_true")
     parser.add_argument("--ascii-slug", action="store_true")
     parser.add_argument(
@@ -113,6 +145,14 @@ def options_from_args(args: argparse.Namespace) -> JobOptions:
         target_duration=args.target_duration,
         layout=args.layout,
         subtitles=args.subtitles,
+        variation=args.variation,
+        style=args.style,
+        caption_mode=args.caption_mode,
+        hook=args.hook,
+        end_card=args.end_card,
+        watermark=args.watermark,
+        loudnorm=args.loudnorm,
+        safe_zones=args.safe_zones,
         proxy=args.proxy,
         cookies=args.cookies,
         model=args.model,

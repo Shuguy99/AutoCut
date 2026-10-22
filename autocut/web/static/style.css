@@ -68,6 +68,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .field.small { flex: 1 1 140px; }
 
+.variation {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 14px 0;
+  margin: 4px 0 16px;
+  background: rgba(15, 18, 26, .45);
+}
+.variation legend {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.variation .field.toggle { flex: 0 1 160px; }
+.variation .field.toggle input[type="checkbox"] { margin: 0; }
+
 .field.toggle { align-content: end; }
 .field.toggle input[type="checkbox"] {
   width: 22px;
@@ -109,6 +126,9 @@ button:disabled { opacity: .6; cursor: wait; }
 .clip-links a { color: var(--accent-2); text-decoration: none; }
 .clip-links a:hover { text-decoration: underline; }
 .clip-error { color: var(--danger); overflow-wrap: anywhere; }
+.clip-variant { overflow-wrap: anywhere; opacity: .85; }
+.job .diversity { color: var(--muted); font-size: 12px; margin-top: 6px; overflow-wrap: anywhere; }
+.job .diversity.warning { color: #ffc857; }
 .feed-item.no-thumb { border-style: dashed; }
 
 .error { color: var(--danger); margin: 10px 0 0; }

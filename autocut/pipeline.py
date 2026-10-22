@@ -26,8 +26,9 @@ from .storage import (
     write_json,
     write_srt,
 )
-from .subtitles import Cue, group_words, write_ass
+from .subtitles import Cue, get_style, group_words, write_ass
 from .transcribe import transcribe
+from .variation import build_publish, build_variants, diversity_report
 
 ProgressFn = Callable[[str, float, str], None]
 
@@ -182,16 +183,33 @@ def run_pipeline(
         _check_cancel(is_cancelled)
 
         emit("score", 65, "поиск интересных фрагментов")
+        max_text_overlap = None
+        if options.variation == "strong":
+            max_text_overlap = 0.55
+        elif options.variation == "subtle":
+            max_text_overlap = 0.65
         candidates = find_highlights(
             duration, rms, transcript.words, scenes,
             count=options.clips,
             min_duration=options.min_duration,
             max_duration=options.max_duration,
             target_duration=options.target_duration,
+            max_text_overlap=max_text_overlap,
         )
         if not candidates:
             raise PipelineError("не удалось найти подходящие фрагменты")
         _check_cancel(is_cancelled)
+
+        clip_texts = [
+            " ".join(
+                word.text for word in transcript.words
+                if word.end > candidate.start and word.start < candidate.end
+            )
+            for candidate in candidates
+        ]
+        variants = build_variants(
+            info.video_id, job_id, options, clip_texts
+        )
 
         result_dir = create_result_dir(
             output_dir, info.channel, info.video_id, info.title,
@@ -207,18 +225,39 @@ def run_pipeline(
                 "render", 65 + 30 * (index - 1) / len(cliplist),
                 f"рендер клипа {index} из {len(cliplist)}",
             )
+            variant = variants[index - 1]
+            clip_text = clip_texts[index - 1]
             try:
-                cues: list[Cue] = []
+                clip_words = [
+                    word for word in transcript.words
+                    if word.end > candidate.start and word.start < candidate.end
+                ]
+                cues: list[Cue] = (
+                    group_words(clip_words)
+                    if options.subtitles and clip_words else []
+                )
                 ass_path: Path | None = None
-                if options.subtitles and transcript.words:
-                    clip_words = [
-                        word for word in transcript.words
-                        if word.end > candidate.start
-                        and word.start < candidate.end
-                    ]
-                    cues = group_words(clip_words)
+                has_overlays = bool(
+                    variant.hook
+                    or variant.end_card
+                    or variant.watermark
+                    or (options.subtitles and cues)
+                )
+                if has_overlays:
                     ass_path = work_dir / f"clip_{index:02d}.ass"
-                    write_ass(cues, ass_path, candidate.start, candidate.end)
+                    write_ass(
+                        cues, ass_path, candidate.start, candidate.end,
+                        style=get_style(variant.style),
+                        hook=variant.hook,
+                        end_card=variant.end_card,
+                        watermark=variant.watermark,
+                        safe_zones=options.safe_zones,
+                        words=clip_words if options.subtitles else None,
+                        caption_mode=(
+                            options.caption_mode if options.subtitles
+                            else "phrase"
+                        ),
+                    )
                 filename = (
                     f"clip_{index:02d}_score-{candidate.score:.2f}.mp4"
                 )
@@ -226,6 +265,10 @@ def run_pipeline(
                 render_clip(
                     info.source_path, candidate.start, candidate.end,
                     ass_path, out_path, layout=options.layout,
+                    zoom=variant.zoom,
+                    pan=(variant.pan_x, variant.pan_y),
+                    grade=variant.grade,
+                    loudnorm=options.loudnorm,
                 )
                 preview = render_preview(
                     out_path, result_dir / "clips" / f"clip_{index:02d}.jpg",
@@ -236,6 +279,13 @@ def run_pipeline(
                     copied = result_dir / "clips" / f"clip_{index:02d}.ass"
                     shutil.copy2(ass_path, copied)
                     final_ass = str(copied)
+                publish = build_publish(
+                    clip_text, variant, info.channel, index
+                )
+                publish_path = (
+                    result_dir / "clips" / f"clip_{index:02d}_publish.json"
+                )
+                write_json(publish_path, publish)
                 clips.append({
                     "index": index,
                     "file": str(out_path),
@@ -246,11 +296,10 @@ def run_pipeline(
                     "duration": round(candidate.end - candidate.start, 3),
                     "score": candidate.score,
                     "parts": candidate.parts,
-                    "text": " ".join(
-                        word.text for word in transcript.words
-                        if word.end > candidate.start
-                        and word.start < candidate.end
-                    ),
+                    "text": clip_text,
+                    "variant": variant.to_dict(),
+                    "publish": publish,
+                    "publish_file": str(publish_path),
                 })
             except CancelledError:
                 raise
@@ -263,23 +312,34 @@ def run_pipeline(
                     "duration": round(candidate.end - candidate.start, 3),
                     "score": candidate.score,
                     "parts": candidate.parts,
+                    "text": clip_text,
+                    "variant": variant.to_dict(),
                     "error": str(exc),
                 })
 
         if not any("file" in clip for clip in clips):
             raise PipelineError("ни один клип не удалось отрендерить")
 
+        diversity = diversity_report(clip_texts)
         save_transcript(result_dir / "transcript.json", transcript)
         write_srt(transcript, result_dir / "transcript.srt")
         write_json(result_dir / "source.json", {
             "source": _source_dict(info),
             "options": options.model_dump(),
         })
+        write_json(result_dir / "publish.json", {
+            "clips": [
+                clip["publish"] for clip in clips if "publish" in clip
+            ],
+        })
+        write_json(result_dir / "diversity.json", diversity)
         write_json(result_dir / "metadata.json", {
             "source": _source_dict(info),
             "options": options.model_dump(),
             "duration": duration,
             "language": transcript.language,
+            "variants": [variant.to_dict() for variant in variants],
+            "diversity": diversity,
             "clips": clips,
         })
         shutil.copy2(log_path, result_dir / "job.log")
@@ -289,6 +349,7 @@ def run_pipeline(
             "source": _source_dict(info),
             "clips": clips,
             "duration": duration,
+            "diversity": diversity,
         }
     except CancelledError:
         emit("cancelled", 0, "задача отменена")

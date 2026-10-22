@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .media import FFMPEG, Encoder, detect_h264_encoder, make_preview
+from .variation import Grade
 
 
 class RenderError(RuntimeError):
@@ -20,6 +21,32 @@ def _run(cmd: list[str], cwd: Path) -> None:
         )
 
 
+def _even(value: float) -> int:
+    number = max(2, int(round(value)))
+    return number if number % 2 == 0 else number + 1
+
+
+def _grade_filter(grade: Grade | None) -> str:
+    if grade is None or not grade.enabled:
+        return ""
+    return (
+        f",eq=contrast={grade.contrast:.4f}:saturation={grade.saturation:.4f}"
+        f":brightness={grade.brightness:.4f}:gamma={grade.gamma:.4f}"
+    )
+
+
+def _pan_expr(axis: str, target: int, pan: float) -> str:
+    factor = max(0.0, min(1.0, 0.5 + 0.5 * pan))
+    return f"({axis}-{target})*{factor:.4f}"
+
+
+def _zoom_geometry(
+    width: int, height: int, zoom: float
+) -> tuple[int, int]:
+    zoom = max(1.0, min(1.15, float(zoom or 1.0)))
+    return _even(width * zoom), _even(height * zoom)
+
+
 def render_clip(
     source: Path | str,
     start: float,
@@ -32,8 +59,17 @@ def render_clip(
     fps: int = 30,
     crf: int = 20,
     encoder: Encoder | None = None,
+    zoom: float = 1.0,
+    pan: tuple[float, float] = (0.0, 0.0),
+    grade: Grade | None = None,
+    loudnorm: bool = True,
 ) -> Path:
-    """Рендерит клип; ``ass_path=None`` — без вжигания субтитров."""
+    """Рендерит клип с вариативным кадрированием и цветокоррекцией.
+
+    ``ass_path=None`` — без вжигания субтитров и плашек. ``zoom``/``pan``
+    задают лёгкий кроп-зум, ``grade`` — цветокоррекцию, ``loudnorm`` —
+    приведение громкости к уровню TikTok.
+    """
     source = Path(source).resolve()
     out_path = Path(out_path).resolve()
     resolved_ass = Path(ass_path).resolve() if ass_path else None
@@ -43,6 +79,14 @@ def render_clip(
     encoder = encoder or detect_h264_encoder()
     hw_upload = ",format=nv12,hwupload" if encoder.hwupload else ""
     burn = f",subtitles=filename={subs}" if subs else ""
+    zoom_w, zoom_h = _zoom_geometry(width, height, zoom)
+    pan_x = max(-1.0, min(1.0, float(pan[0] if pan else 0.0)))
+    pan_y = max(
+        -1.0, min(1.0, float(pan[1]) if pan and len(pan) > 1 else 0.0)
+    )
+    x_expr = _pan_expr("iw", width, pan_x)
+    y_expr = _pan_expr("ih", height, pan_y)
+    grade_filter = _grade_filter(grade)
 
     cmd = [
         FFMPEG, "-y", "-v", "error",
@@ -54,20 +98,26 @@ def render_clip(
 
     if layout == "crop":
         video_filter = (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height}{burn}{hw_upload}"
+            f"scale={zoom_w}:{zoom_h}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}:{x_expr}:{y_expr}"
+            f"{grade_filter}{burn}{hw_upload}"
         )
         cmd += ["-vf", video_filter, "-map", "0:v", "-map", "0:a?"]
     else:
         complex_filter = (
             f"[0:v]split=2[bg][fg];"
-            f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},gblur=sigma=30[bgv];"
+            f"[bg]scale={zoom_w}:{zoom_h}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}:{x_expr}:{y_expr},gblur=sigma=30[bgv];"
             f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fgv];"
-            f"[bgv][fgv]overlay=(W-w)/2:(H-h)/2{burn}{hw_upload}[v]"
+            f"[bgv][fgv]overlay=(W-w)/2:(H-h)/2[comp];"
+            f"[comp]scale={zoom_w}:{zoom_h},"
+            f"crop={width}:{height}:{x_expr}:{y_expr}"
+            f"{grade_filter}{burn}{hw_upload}[v]"
         )
         cmd += ["-filter_complex", complex_filter, "-map", "[v]", "-map", "0:a?"]
 
+    if loudnorm:
+        cmd += ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"]
     cmd += encoder.output_args(crf)
     if not encoder.hwupload:
         cmd += ["-pix_fmt", "yuv420p"]

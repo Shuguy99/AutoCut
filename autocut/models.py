@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 @dataclass
@@ -88,10 +88,26 @@ class JobOptions(BaseModel):
     target_duration: float = Field(30, ge=1, le=120)
     layout: Literal["blur", "crop"] = "blur"
     subtitles: bool = True
+    variation: Literal["off", "subtle", "strong"] = "subtle"
+    style: Literal["auto", "clean", "bold", "karaoke", "minimal"] = "auto"
+    caption_mode: Literal["phrase", "word"] = "phrase"
+    hook: bool = True
+    end_card: bool = True
+    watermark: str | None = Field(default=None, max_length=40)
+    loudnorm: bool = True
+    safe_zones: bool = True
     proxy: str | None = None
     cookies: str | None = None
     model: str | None = None
     language: str | None = None
+
+    @field_validator("watermark")
+    @classmethod
+    def _clean_watermark(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
     @model_validator(mode="after")
     def _validate(self) -> "JobOptions":

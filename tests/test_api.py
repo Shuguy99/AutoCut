@@ -254,6 +254,43 @@ def test_create_job_rejects_blank_source(config: Config):
     assert response.status_code == 422
 
 
+def test_job_accepts_uniqueness_options(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {
+            "clips": 2,
+            "variation": "strong",
+            "style": "karaoke",
+            "caption_mode": "word",
+            "watermark": " @nick ",
+            "hook": False,
+            "end_card": False,
+            "loudnorm": False,
+            "safe_zones": False,
+        },
+    })
+    assert response.status_code == 200
+    options = response.json()["options"]
+    assert options["variation"] == "strong"
+    assert options["style"] == "karaoke"
+    assert options["caption_mode"] == "word"
+    assert options["watermark"] == "@nick"
+    assert options["hook"] is False
+    assert options["end_card"] is False
+    assert options["loudnorm"] is False
+    assert options["safe_zones"] is False
+
+
+def test_job_rejects_unknown_style(config: Config):
+    client = _client(config)
+    response = client.post("/api/jobs", json={
+        "source": "/tmp/video.mp4",
+        "options": {"style": "neon"},
+    })
+    assert response.status_code == 422
+
+
 def test_batch_drops_blank_sources(config: Config):
     client = _client(config)
     response = client.post("/api/jobs/batch", json={

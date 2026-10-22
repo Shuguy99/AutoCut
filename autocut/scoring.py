@@ -39,6 +39,24 @@ def _window_words(words: list[Word], start: float, end: float) -> list[Word]:
     return [w for w in words if w.end > start and w.start < end]
 
 
+def _word_key(value: str) -> str:
+    return value.strip(".,!?…:;\"'()[]«»—–-").lower()
+
+
+def _jaccard(first: set[str], second: set[str]) -> float:
+    if not first or not second:
+        return 0.0
+    return len(first & second) / len(first | second)
+
+
+def _candidate_text_set(words: list[Word], start: float, end: float) -> set[str]:
+    return {
+        _word_key(word.text)
+        for word in _window_words(words, start, end)
+        if len(_word_key(word.text)) >= 3
+    }
+
+
 def _speech_coverage(words: list[Word], start: float, end: float) -> float:
     if end <= start:
         return 0.0
@@ -85,8 +103,13 @@ def find_highlights(
     max_duration: float = 60,
     target_duration: float = 30,
     step: float = 1.0,
+    max_text_overlap: float | None = None,
 ) -> list[ClipCandidate]:
-    """Возвращает до ``count`` непересекающихся кандидатов по убыванию score."""
+    """Возвращает до ``count`` непересекающихся кандидатов по убыванию score.
+
+    ``max_text_overlap`` дополнительно отбрасывает кандидаты, слишком похожие
+    по словам на уже выбранные (Jaccard-похожесть выше порога).
+    """
     duration = max(0.1, float(duration))
     if duration <= min_duration:
         return [ClipCandidate(0.0, duration, 1.0, {
@@ -160,11 +183,26 @@ def find_highlights(
         )
 
     selected: list[ClipCandidate] = []
+    selected_sets: list[set[str]] = []
     for candidate in sorted(candidates, key=lambda c: c.score, reverse=True):
-        if all(
+        if not all(
             _overlap_ratio(candidate, other) <= 0.3 for other in selected
         ):
-            selected.append(candidate)
+            continue
+        if max_text_overlap is not None:
+            current_set = _candidate_text_set(
+                words, candidate.start, candidate.end
+            )
+            if current_set and any(
+                _jaccard(current_set, other) > max_text_overlap
+                for other in selected_sets if other
+            ):
+                continue
+        selected.append(candidate)
+        if max_text_overlap is not None:
+            selected_sets.append(
+                _candidate_text_set(words, candidate.start, candidate.end)
+            )
         if len(selected) >= count:
             break
     return selected

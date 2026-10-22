@@ -51,6 +51,14 @@ autocut app --config ./config.yaml
 | `target_duration` | float | 30 | 1–120 | целевая длина; зажимается в min–max |
 | `layout` | `blur`/`crop` | `blur` | — | фон или центральный кроп |
 | `subtitles` | bool | `true` | — | вжигать ли ASS |
+| `variation` | `off`/`subtle`/`strong` | `subtle` | — | различия стиля и кадрирования |
+| `style` | `auto`/`clean`/`bold`/`karaoke`/`minimal` | `auto` | — | стиль субтитров |
+| `caption_mode` | `phrase`/`word` | `phrase` | — | фразы или подсветка слов |
+| `hook` | bool | `true` | — | хук в начале клипа |
+| `end_card` | bool | `true` | — | финальная плашка |
+| `watermark` | string \| null | `null` | до 40 символов | водяной знак |
+| `loudnorm` | bool | `true` | — | громкость −14 LUFS |
+| `safe_zones` | bool | `true` | — | отступ под интерфейс TikTok |
 | `proxy` | string \| null | `null` | — | переопределяет `config.proxy` |
 | `cookies` | string \| null | `null` | — | переопределяет `config.cookies` |
 | `model` | string \| null | `null` | — | переопределяет `config.model` |
@@ -65,10 +73,17 @@ autocut app --config ./config.yaml
 ```
 --clips N          --min SECONDS      --max SECONDS
 --target SECONDS   --format blur|crop --no-subtitles
+--variation MODE   --style STYLE      --caption-mode MODE
+--watermark TEXT   --no-hook          --no-end-card
+--no-loudnorm      --no-safe-zones
 --model NAME       --language LANG    --proxy URL
 --cookies FILE     --output DIR       --config FILE
 --keep-work        --ascii-slug       --json
 ```
+
+`--variation`: `off`, `subtle`, `strong` (по умолчанию `subtle`).
+`--style`: `auto`, `clean`, `bold`, `karaoke`, `minimal` (по умолчанию `auto`).
+`--caption-mode`: `phrase` или `word` (по умолчанию `phrase`).
 
 Для `run` дополнительно:
 
@@ -91,10 +106,13 @@ autocut app --config ./config.yaml
 ```
 <output_dir>/<channel-slug>/<video_id>_<title-slug>[_2]/
   clips/clip_01_score-0.87.mp4
-  clips/clip_01.ass          # если субтитры включены
+  clips/clip_01.ass          # если есть субтитры или плашки
   clips/clip_01.jpg
+  clips/clip_01_publish.json
   transcript.srt
   transcript.json
+  publish.json
+  diversity.json
   metadata.json
   source.json
   job.log
@@ -102,3 +120,6 @@ autocut app --config ./config.yaml
 
 Существующая папка не перезаписывается: добавляется `_2`, `_3`, …
 Кэш транскриптов: `<work_dir>/cache/transcripts/`.
+
+Подробнее про вариативность, `diversity.json` и публикацию — в
+[uniqueness.md](uniqueness.md).

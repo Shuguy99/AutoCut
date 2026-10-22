@@ -38,6 +38,43 @@ def test_no_subtitles_flag():
     assert options_from_args(args).subtitles is False
 
 
+def test_uniqueness_defaults():
+    options = options_from_args(
+        build_parser().parse_args(["run", "video.mp4"])
+    )
+    assert options.variation == "subtle"
+    assert options.style == "auto"
+    assert options.caption_mode == "phrase"
+    assert options.hook is True
+    assert options.end_card is True
+    assert options.loudnorm is True
+    assert options.safe_zones is True
+    assert options.watermark is None
+
+
+def test_uniqueness_flags():
+    args = build_parser().parse_args([
+        "run", "video.mp4",
+        "--variation", "strong",
+        "--style", "karaoke",
+        "--caption-mode", "word",
+        "--watermark", " @nick ",
+        "--no-hook",
+        "--no-end-card",
+        "--no-loudnorm",
+        "--no-safe-zones",
+    ])
+    options = options_from_args(args)
+    assert options.variation == "strong"
+    assert options.style == "karaoke"
+    assert options.caption_mode == "word"
+    assert options.watermark == "@nick"
+    assert options.hook is False
+    assert options.end_card is False
+    assert options.loudnorm is False
+    assert options.safe_zones is False
+
+
 def test_app_defaults():
     args = build_parser().parse_args(["app"])
     assert args.host == "127.0.0.1"

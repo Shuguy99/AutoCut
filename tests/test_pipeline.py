@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import json
+
 import numpy as np
 import pytest
 
@@ -79,7 +81,7 @@ def test_pipeline_without_subtitles(
 ):
     options = JobOptions(
         clips=1, min_duration=2, max_duration=4, target_duration=3,
-        subtitles=False,
+        subtitles=False, hook=False, end_card=False,
     )
     result = run_pipeline(str(sample_video), options, config)
     result_dir = Path(result["result_dir"])
@@ -107,6 +109,7 @@ def test_pipeline_without_audio(
     monkeypatch.setattr("autocut.pipeline.transcribe", no_transcribe)
     options = JobOptions(
         clips=1, min_duration=2, max_duration=4, target_duration=3,
+        hook=False, end_card=False,
     )
     result = run_pipeline(str(sample_video), options, config)
     result_dir = Path(result["result_dir"])
@@ -131,3 +134,47 @@ def test_transcript_cache_key_includes_model_and_language(tmp_path: Path):
     assert other is None
     assert path.parent == cache
     assert ".." not in path.name
+
+
+def test_pipeline_writes_variants_publish_and_diversity(
+    sample_video: Path, config: Config, monkeypatch
+):
+    tokens = [
+        "первый", "текст", "про", "деньги", "и", "успех.",
+        "второй", "текст", "про", "спорт", "и", "тренировки.",
+    ]
+    words = [
+        Word(index * 0.5, index * 0.5 + 0.4, token)
+        for index, token in enumerate(tokens)
+    ]
+    transcript = Transcript(
+        language="ru", words=words,
+        segments=[Segment(0.0, 6.0, " ".join(tokens))],
+        text=" ".join(tokens),
+    )
+    monkeypatch.setattr(
+        "autocut.pipeline.transcribe", lambda *args, **kwargs: transcript
+    )
+    options = JobOptions(
+        clips=2, min_duration=2, max_duration=4, target_duration=3,
+        variation="strong", style="auto", watermark="@nick",
+    )
+    result = run_pipeline(str(sample_video), options, config)
+    result_dir = Path(result["result_dir"])
+    assert len(result["clips"]) == 2
+
+    publish = json.loads((result_dir / "publish.json").read_text("utf-8"))
+    diversity = json.loads((result_dir / "diversity.json").read_text("utf-8"))
+    metadata = json.loads((result_dir / "metadata.json").read_text("utf-8"))
+    assert len(publish["clips"]) == 2
+    assert diversity["score"] > 0
+    assert len(metadata["variants"]) == 2
+
+    clip = result["clips"][0]
+    assert clip["variant"]["watermark"] == "@nick"
+    assert clip["publish"]["title"]
+    assert Path(clip["publish_file"]).exists()
+    ass = Path(clip["subtitle"]).read_text(encoding="utf-8")
+    assert "Watermark" in ass
+    assert "Hook" in ass
+    assert "EndCard" in ass

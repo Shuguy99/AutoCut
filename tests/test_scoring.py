@@ -71,3 +71,44 @@ def test_empty_transcript_still_returns_clips():
     )
     assert clips
     assert all(c.parts["speech"] == 0 for c in clips)
+
+
+def test_max_text_overlap_filters_duplicate_windows():
+    duration = 120.0
+    words = [
+        Word(t, t + 0.4, "одинаковый")
+        for t in np.arange(0, duration, 0.5)
+    ]
+    clips = find_highlights(
+        duration, np.ones(240), words, [], count=3,
+        min_duration=20, max_duration=30, target_duration=25,
+        max_text_overlap=0.6,
+    )
+    assert len(clips) == 1
+
+
+def test_max_text_overlap_ignores_empty_transcript():
+    clips = find_highlights(
+        90.0, np.ones(180), [], [], count=3,
+        min_duration=20, max_duration=30, target_duration=25,
+        max_text_overlap=0.6,
+    )
+    assert len(clips) == 3
+
+
+def test_max_text_overlap_keeps_different_windows():
+    duration = 90.0
+    words = []
+    for index, token in enumerate(
+        ["деньги", "успех", "бизнес"] * 30
+        + ["спорт", "бег", "тренировки"] * 30
+        + ["кино", "сюжет", "финал"] * 30
+    ):
+        start = index * 0.5
+        words.append(Word(start, start + 0.4, token))
+    clips = find_highlights(
+        duration, np.ones(180), words, [], count=3,
+        min_duration=20, max_duration=30, target_duration=25,
+        max_text_overlap=0.6,
+    )
+    assert len(clips) >= 2
